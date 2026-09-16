@@ -1,6 +1,7 @@
 import Phaser from 'phaser';
 import { ABILITIES, RARITY_COLOR, PASSIVES, BASIC_ABILITY_ID, TYPE_ICON } from './abilityData.js';
 import { playSfx, castSfxFor } from './audio.js';
+import { ARENA_BG, ABILITY_ICON_URI } from './assets.js';
 
 // Physical-keycode map (not e.key) so WASD/number/R bindings work regardless of the
 // player's OS keyboard language/layout — see server-side lesson from the earlier
@@ -60,9 +61,22 @@ export default class ArenaScene extends Phaser.Scene {
     this.myId = this.room.sessionId;
   }
 
+  preload() {
+    // illustrated concept-art background, inlined as base64 — see assets.js
+    this.load.image('arenaBg', ARENA_BG);
+  }
+
   create() {
     this.cameras.main.setBackgroundColor('#050308');
     this.generateTextures();
+
+    // illustrated backdrop (real concept art) sits behind everything else; the
+    // procedural decor/grid/border still draw on top of it for gameplay clarity
+    const state0 = this.room.state;
+    this.add.image(state0.arenaW / 2, state0.arenaH / 2, 'arenaBg')
+      .setDisplaySize(state0.arenaW, state0.arenaH)
+      .setAlpha(0.6)
+      .setDepth(-10);
 
     // draw order (back to front): static decor -> ground marks -> orb -> zone ->
     // ability fx -> players/names
@@ -225,7 +239,8 @@ export default class ArenaScene extends Phaser.Scene {
     g.clear();
     const W = state.arenaW, H = state.arenaH, cx = W / 2, cy = H / 2;
 
-    g.fillStyle(0x0b0918, 1);
+    // light wash (not fully opaque) so the illustrated background image shows through
+    g.fillStyle(0x0b0918, 0.35);
     g.fillRect(0, 0, W, H);
 
     // poor-man's radial glow toward the arena center (concentric fading circles)
@@ -477,8 +492,12 @@ export default class ArenaScene extends Phaser.Scene {
       const card = document.createElement('div');
       card.className = 'opt';
       card.style.setProperty('--rc', def ? RARITY_COLOR[def.rarity] : '#c9d6ff');
+      const iconUri = ABILITY_ICON_URI[id];
+      const iconHtml = iconUri
+        ? `<img class="opt-icon-img" src="${iconUri}" alt="" />`
+        : `<div class="opt-icon">${def ? (TYPE_ICON[def.type] || '✨') : '✨'}</div>`;
       card.innerHTML = `
-        <div class="opt-icon">${def ? (TYPE_ICON[def.type] || '✨') : '✨'}</div>
+        ${iconHtml}
         <div class="opt-name">${def ? def.nameAr : id}</div>
         <div class="opt-rarity">${def ? def.rarity : ''}</div>
         <div class="opt-desc">${def ? def.desc : ''}</div>
@@ -899,9 +918,12 @@ export default class ArenaScene extends Phaser.Scene {
       const def = id ? ABILITIES[id] : null;
       const cdUntil = id ? (me.cooldowns.get ? me.cooldowns.get(id) : me.cooldowns[id]) || 0 : 0;
       const cdLeft = Math.max(0, Math.ceil((cdUntil - now) / 1000));
+      const iconUri = id ? ABILITY_ICON_URI[id] : null;
+      const slotIconHtml = iconUri ? `<img class="slot-icon-img" src="${iconUri}" alt="" />` : '';
       slots.push(`<div class="slot" data-idx="${i}" style="border-color:${def ? RARITY_COLOR[def.rarity] : '#333'}">
         <div class="key">${i + 1}</div>
-        ${id ? `<div class="nm">${TYPE_ICON[def.type] || ''} ${def.nameAr}</div>` : ''}
+        ${slotIconHtml}
+        ${id ? `<div class="nm">${iconUri ? '' : (TYPE_ICON[def.type] || '')} ${def.nameAr}</div>` : ''}
         ${cdLeft > 0 ? `<div class="cd">${cdLeft}</div>` : ''}
       </div>`);
     }
@@ -936,4 +958,4 @@ function getHudRefs() {
     passiveToast: byId('passiveToast'), passiveToastIcon: byId('passiveToastIcon'),
     passiveToastName: byId('passiveToastName'), passiveToastDesc: byId('passiveToastDesc'),
   };
-}
+                   }
