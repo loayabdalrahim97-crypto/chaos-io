@@ -16,6 +16,7 @@ export const ABILITIES = {
   mine:      { nameAr: 'الفخ',           type: 'TRICK',     rarity: 'COMMON',    cooldown: 8000,  telegraph: 0,    radius: 50,  color: 0xcccccc },
   tsunami:   { nameAr: 'تسونامي',        type: 'GLOBAL',    rarity: 'LEGENDARY', cooldown: 26000, telegraph: 1000, radius: 0,   color: 0x4cc3ff },
   boss_nova: { nameAr: 'انفجار الوحش',   type: 'OFFENSIVE', rarity: 'LEGENDARY', cooldown: 6000,  telegraph: 500,  radius: 150, color: 0xff3d81 },
+  strike:    { nameAr: 'الضربة الأساسية', type: 'OFFENSIVE', rarity: 'BASIC',    cooldown: 900,   telegraph: 0,    radius: 16,  color: 0xffe27a, speed: 700 },
 };
 
 export const RARITY_COLOR = {
@@ -23,7 +24,14 @@ export const RARITY_COLOR = {
   RARE: '#8ae8ff',
   EPIC: '#d6b3ff',
   LEGENDARY: '#ffd166',
+  BASIC: '#ffe27a',
 };
+
+// Mirrors the server's PICKABLE_STARTERS/PICKS_REQUIRED — the login screen offers
+// exactly these as a starting-loadout choice (the "you pick your abilities" step).
+export const PICKABLE_STARTERS = ['dash', 'shield', 'fireball', 'mine'];
+export const PICKS_REQUIRED = 2;
+export const BASIC_ABILITY_ID = 'strike';
 
 export const PASSIVES = {
   bloodlust:  { nameAr: 'نهم الدم' },
