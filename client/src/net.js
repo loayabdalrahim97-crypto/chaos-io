@@ -1,12 +1,17 @@
 import { Client } from 'colyseus.js';
 
-// Same-origin dev convenience: talk to the colyseus server on :2567 of whatever host
-// is serving the page, unless overridden with ?server=ws://host:port
+// Production default: the deployed Colyseus server on Railway.
+// Local dev: served from localhost, so fall back to same-host :2567.
+// Always overridable with ?server=ws://host:port
+const PROD_SERVER = 'wss://server-production-5445.up.railway.app';
+
 export function serverUrl() {
   const qp = new URLSearchParams(location.search).get('server');
   if (qp) return qp;
-  const proto = location.protocol === 'https:' ? 'wss' : 'ws';
-  return `${proto}://${location.hostname}:2567`;
+  if (location.hostname === 'localhost' || location.hostname === '127.0.0.1') {
+    return `ws://${location.hostname}:2567`;
+  }
+  return PROD_SERVER;
 }
 
 export async function joinArena(name) {
