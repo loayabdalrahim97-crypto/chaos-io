@@ -4,8 +4,19 @@ import { ArenaState, Player } from '../schema/state.js';
 import {
   ABILITIES, ABILITY_IDS, STARTER_ABILITIES, MAX_ABILITY_SLOTS,
   PASSIVES, PASSIVE_IDS, MAX_PASSIVE_SLOTS, BOSS_ABILITIES,
+  PICKABLE_STARTERS, PICKS_REQUIRED, BASIC_ABILITY,
   MAX_HP, MAX_SHIELD, SHIELD_REGEN_DELAY, SHIELD_REGEN_RATE, PLAYER_SPEED,
 } from '../abilities.js';
+
+// Validate a client-submitted starting loadout: must be exactly PICKS_REQUIRED unique
+// ids drawn from PICKABLE_STARTERS. Anything else (missing, malformed, abilities the
+// client isn't allowed to start with) falls back to the default pair — never trust
+// the client to hand us a legal loadout.
+function sanitizePicks(raw) {
+  if (!Array.isArray(raw)) return null;
+  const uniq = [...new Set(raw.filter((id) => PICKABLE_STARTERS.includes(id)))];
+  return uniq.length === PICKS_REQUIRED ? uniq : null;
+}
 
 const TICK_MS = 50; // 20Hz server simulation — plenty for an arena this size
 const ROUND_TIME = 150; // seconds
@@ -55,6 +66,7 @@ export class ArenaRoom extends Room {
     this.effects = [];           // transient server-side effects being processed
     this.mines = [];             // placed traps {x,y,caster,expiresAt,triggered}
     this.pendingUpgrades = new Map(); // sessionId -> {options, timeout}
+    this.playerPicks = new Map(); // sessionId -> the 2 abilities they chose at join (survives round restarts)
     this.botFillTimer = null;
     this.restartTimer = null;
     this.nextUpgradeAt = 0;
@@ -80,7 +92,9 @@ export class ArenaRoom extends Room {
     p.isBot = false;
     p.ring = RINGS[this.state.players.size % RINGS.length];
     this.spawnPosition(p);
-    p.abilities.push(...STARTER_ABILITIES);
+    const picks = sanitizePicks(options && options.picks) || STARTER_ABILITIES.slice();
+    this.playerPicks.set(client.sessionId, picks);
+    p.abilities.push(...picks);
     this.state.players.set(client.sessionId, p);
 
     this.broadcast('toast', { text: `${p.name} joined the arena` });
@@ -95,6 +109,7 @@ export class ArenaRoom extends Room {
       this.state.players.delete(client.sessionId);
     }
     this.pendingUpgrades.delete(client.sessionId);
+    this.playerPicks.delete(client.sessionId);
     if (this.state.phase === 'waiting') this.checkStart();
   }
 
@@ -129,7 +144,9 @@ export class ArenaRoom extends Room {
       p.isBot = true;
       p.ring = RINGS[this.state.players.size % RINGS.length];
       this.spawnPosition(p);
-      p.abilities.push(...STARTER_ABILITIES);
+      const picks = PICKABLE_STARTERS.slice().sort(() => Math.random() - 0.5).slice(0, PICKS_REQUIRED);
+      this.playerPicks.set(id, picks);
+      p.abilities.push(...picks);
       this.state.players.set(id, p);
       this.botState.set(id, { decisionAt: 0, decisionInterval: rand(220, 420), targetId: null, retargetAt: 0, wanderTarget: null, wanderUntil: 0, style: Math.random() < 0.5 ? 'aggressive' : 'cautious' });
     }
@@ -172,7 +189,7 @@ export class ArenaRoom extends Room {
     this.state.players.forEach((p) => {
       p.hp = MAX_HP; p.maxHp = MAX_HP; p.shield = MAX_SHIELD; p.maxShield = MAX_SHIELD;
       p.alive = true; p.kills = 0; p.score = 0; p.isBoss = false; p.invulnUntil = 0;
-      p.abilities.splice(0, p.abilities.length, ...STARTER_ABILITIES);
+      p.abilities.splice(0, p.abilities.length, ...(this.playerPicks.get(p.id) || STARTER_ABILITIES));
       p.passives.splice(0, p.passives.length);
       Array.from(p.cooldowns.keys()).forEach((k) => p.cooldowns.delete(k));
       this.spawnPosition(p);
@@ -201,7 +218,7 @@ export class ArenaRoom extends Room {
 
     this.restartTimer = setTimeout(() => {
       // drop bots, refill, and go again — a real multiplayer room just keeps looping
-      [...this.state.players.entries()].forEach(([id, p]) => { if (p.isBot) { this.state.players.delete(id); this.botState.delete(id); } });
+      [...this.state.players.entries()].forEach(([id, p]) => { if (p.isBot) { this.state.players.delete(id); this.botState.delete(id); this.playerPicks.delete(id); } });
       this.state.phase = 'waiting';
       if (this.state.players.size > 0) this.fillWithBotsAndStart();
     }, RESTART_DELAY_MS);
@@ -235,10 +252,13 @@ export class ArenaRoom extends Room {
   maxHpOf(p) { return MAX_HP + (p.isBoss ? BOSS_HP_BONUS : 0); }
 
   tryCast(entity, abilityId, tx, ty) {
-    const a = ABILITIES[abilityId] || BOSS_ABILITIES[abilityId];
+    const isBasic = abilityId === BASIC_ABILITY.id;
+    const a = ABILITIES[abilityId] || BOSS_ABILITIES[abilityId] || (isBasic ? BASIC_ABILITY : null);
     if (!a) return false;
     if (BOSS_ABILITIES[abilityId]) {
       if (!entity.isBoss) return false; // boss-only ability, never part of a loadout
+    } else if (isBasic) {
+      // always available — not part of the chosen/unlocked loadout, no ownership check
     } else if (!entity.abilities.includes(abilityId)) {
       return false; // server-authoritative: reject casts for abilities the caster hasn't unlocked
     }
@@ -255,9 +275,11 @@ export class ArenaRoom extends Room {
 
   performCast(entity, id, tx, ty) {
     const now = Date.now();
-    const a = ABILITIES[id] || BOSS_ABILITIES[id];
+    const a = ABILITIES[id] || BOSS_ABILITIES[id] || (id === BASIC_ABILITY.id ? BASIC_ABILITY : null);
     if (id === 'boss_nova') {
       this.effects.push({ type: 'meteor', x: entity.x, y: entity.y, caster: entity, createdAt: now, telegraph: a.telegraph, impacted: false, damage: a.damage, radius: a.radius });
+    } else if (id === BASIC_ABILITY.id) {
+      this.effects.push({ type: 'fireball', x: entity.x, y: entity.y, vx: 0, vy: 0, dir: normalize(tx - entity.x, ty - entity.y), speed: a.speed, caster: entity, createdAt: now, maxLife: 1200, damage: a.damage, radius: a.radius, abilityId: id });
     } else if (id === 'dash' || id === 'teleport') {
       const dir = normalize(tx - entity.x, ty - entity.y);
       const dist_ = id === 'dash' ? a.range : a.range;
@@ -267,7 +289,7 @@ export class ArenaRoom extends Room {
     } else if (id === 'shield') {
       entity.invulnUntil = now + a.duration;
     } else if (id === 'fireball') {
-      this.effects.push({ type: 'fireball', x: entity.x, y: entity.y, vx: 0, vy: 0, dir: normalize(tx - entity.x, ty - entity.y), speed: a.speed, caster: entity, createdAt: now, maxLife: 1500, damage: a.damage, radius: a.radius });
+      this.effects.push({ type: 'fireball', x: entity.x, y: entity.y, vx: 0, vy: 0, dir: normalize(tx - entity.x, ty - entity.y), speed: a.speed, caster: entity, createdAt: now, maxLife: 1500, damage: a.damage, radius: a.radius, abilityId: id });
     } else if (id === 'meteor') {
       this.effects.push({ type: 'meteor', x: tx, y: ty, caster: entity, createdAt: now, telegraph: a.telegraph, impacted: false, damage: a.damage, radius: a.radius });
     } else if (id === 'lightning') {
@@ -504,6 +526,9 @@ export class ArenaRoom extends Room {
 
       if (now - bs.decisionAt > bs.decisionInterval) {
         bs.decisionAt = now;
+        if (bd < 480 && (p.cooldowns.get(BASIC_ABILITY.id) || 0) <= now && Math.random() < 0.45) {
+          this.tryCast(p, BASIC_ABILITY.id, target.x, target.y);
+        }
         if (Math.random() < 0.14) {
           const options = p.abilities.filter((id) => {
             if ((p.cooldowns.get(id) || 0) > now) return false;
@@ -693,7 +718,7 @@ export class ArenaRoom extends Room {
         let hit = false;
         this.state.players.forEach((e) => {
           if (hit || !e.alive || e === fx.caster) return;
-          if (dist(e, fx) < 24) { this.applyDamage(e, fx.damage, fx.caster, 'fireball'); hit = true; }
+          if (dist(e, fx) < 24) { this.applyDamage(e, fx.damage, fx.caster, fx.abilityId || 'fireball'); hit = true; }
         });
         if (hit || elapsed > fx.maxLife || fx.x < -40 || fx.x > this.state.arenaW + 40 || fx.y < -40 || fx.y > this.state.arenaH + 40) this.effects.splice(i, 1);
       }
