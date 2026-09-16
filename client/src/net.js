@@ -14,8 +14,8 @@ export function serverUrl() {
   return PROD_SERVER;
 }
 
-export async function joinArena(name) {
+export async function joinArena(name, picks) {
   const client = new Client(serverUrl());
-  const room = await client.joinOrCreate('arena', { name });
+  const room = await client.joinOrCreate('arena', { name, picks });
   return room;
 }
