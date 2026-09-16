@@ -56,10 +56,11 @@
 
     #hotbar { left: 50%; bottom: 14px; transform: translateX(-50%); display: flex; gap: 8px; }
     .slot { width: 56px; height: 56px; border-radius: 10px; background: rgba(20,16,36,0.85); backdrop-filter: blur(2px); border: 2px solid rgba(255,255,255,0.15); position: relative; text-align: center; overflow: hidden; pointer-events: auto; cursor: pointer; touch-action: none; }
-    .slot .key { position: absolute; top: 2px; right: 4px; font-size: 10px; color: #fff; opacity: 0.7; }
-    .slot .nm { position: absolute; bottom: 2px; width: 100%; font-size: 8px; color: #fff; line-height: 1.15; }
-    .slot .cd { position: absolute; inset: 0; background: rgba(0,0,0,0.65); display: flex; align-items: center; justify-content: center; font-size: 13px; font-weight: 700; }
+    .slot .key { position: absolute; top: 2px; right: 4px; font-size: 10px; color: #fff; opacity: 0.7; z-index: 2; text-shadow: 0 1px 2px #000; }
+    .slot .nm { position: absolute; bottom: 2px; width: 100%; font-size: 8px; color: #fff; line-height: 1.15; z-index: 2; text-shadow: 0 1px 2px #000; }
+    .slot .cd { position: absolute; inset: 0; background: rgba(0,0,0,0.65); display: flex; align-items: center; justify-content: center; font-size: 13px; font-weight: 700; z-index: 3; }
     .slot.basic { border-color: #ffe27a; box-shadow: 0 0 8px rgba(255,226,122,0.35); }
+    .slot-icon-img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; opacity: 0.9; z-index: 1; }
 
     #passives { right: 16px; bottom: 16px; text-align: right; }
     #passives .p { font-size: 11px; color: #ffe27a; background: rgba(20,16,36,0.7); border-radius: 6px; padding: 3px 8px; margin-bottom: 4px; display: inline-block; }
@@ -140,6 +141,7 @@
     #upgradeModal .opt:hover { transform: translateY(-6px) scale(1.04); box-shadow: 0 4px 22px var(--rc); }
     #upgradeModal .opt.picked { transform: scale(0.9); opacity: 0.35; }
     #upgradeModal .opt-icon { font-size: 26px; margin-bottom: 4px; }
+    #upgradeModal .opt-icon-img { width: 56px; height: 56px; object-fit: cover; border-radius: 10px; margin-bottom: 4px; box-shadow: 0 0 14px var(--rc); border: 1px solid rgba(255,255,255,0.25); }
     #upgradeModal .opt-name { font-size: 14px; font-weight: 700; color: #f0ecff; }
     #upgradeModal .opt-rarity { font-size: 9px; margin-top: 2px; color: var(--rc); letter-spacing: 1px; }
     #upgradeModal .opt-desc { font-size: 10px; color: #b9b0d9; margin-top: 8px; line-height: 1.4; min-height: 40px; }
