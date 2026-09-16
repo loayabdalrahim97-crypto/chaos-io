@@ -58,8 +58,21 @@ export const BOSS_ABILITIES = {
   },
 };
 
-export const STARTER_ABILITIES = ['dash', 'shield']; // every player begins with just these two
+export const STARTER_ABILITIES = ['dash', 'shield']; // fallback if a client sends no/invalid picks
 export const MAX_ABILITY_SLOTS = 4;
+
+// The pre-join loadout picker offers exactly these COMMON abilities — balanced enough
+// to let a new player choose their own starting pair (the original "you pick your
+// abilities" concept) without handing out something round-swinging on spawn.
+export const PICKABLE_STARTERS = ['dash', 'shield', 'fireball', 'mine'];
+export const PICKS_REQUIRED = 2;
+
+// Always-available basic attack — separate from the chosen/unlocked loadout entirely,
+// never occupies a hotbar slot, never offered as an upgrade, can't be unequipped.
+export const BASIC_ABILITY = {
+  id: 'strike', nameAr: 'الضربة الأساسية', nameEn: 'STRIKE', type: 'OFFENSIVE', rarity: 'BASIC',
+  cooldown: 900, speed: 700, damage: 7, radius: 16, desc: 'هجوم أساسي بسيط، كولداون قصير — متاح دائمًا لكل لاعب.'
+};
 
 export const PASSIVES = {
   bloodlust:  { id: 'bloodlust',  nameAr: 'نهم الدم',     nameEn: 'BLOODLUST',   desc: '+15% سرعة لمدة 5 ثوانٍ بعد كل قتل.' },
