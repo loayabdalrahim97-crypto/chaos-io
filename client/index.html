@@ -3,213 +3,169 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
-  <title>CHAOS.IO — ساحة القدرات</title>
+  <title>CHAOS.IO — ساحة الأبطال</title>
   <style>
-    html, body { margin: 0; padding: 0; background: #07060d; overflow: hidden; height: 100%; }
+    :root { --gold: #ffd166; --ink: #f4eedc; --muted: #b6ab8f; --panel: rgba(28,22,14,0.92); --edge: #6b4a2b; }
+    html, body { margin: 0; padding: 0; background: #1b140c; overflow: hidden; height: 100%; font-family: 'Segoe UI', Tahoma, sans-serif; color: var(--ink); }
+    * { box-sizing: border-box; }
+    .px { image-rendering: pixelated; image-rendering: crisp-edges; }
+    [style*="background-image"] { image-rendering: pixelated; }
     #game { width: 100vw; height: 100vh; }
-    #login {
-      position: fixed; inset: 0; display: flex; align-items: center; justify-content: center;
-      background: radial-gradient(circle at 50% 30%, #1c1430 0%, #07060d 70%);
-      font-family: 'Segoe UI', Tahoma, sans-serif; z-index: 20;
-    }
-    #login .card {
-      background: rgba(20,16,36,0.9); border: 1px solid rgba(255,226,122,0.25);
-      border-radius: 16px; padding: 32px 36px; text-align: center; min-width: 280px;
-      box-shadow: 0 0 40px rgba(255,200,120,0.08);
-    }
-    #login h1 { color: #ffe27a; margin: 0 0 6px; font-size: 26px; letter-spacing: 1px; }
-    #login p { color: #9d95b8; margin: 0 0 18px; font-size: 13px; }
-    #login input {
-      width: 100%; box-sizing: border-box; padding: 10px 12px; border-radius: 8px; border: 1px solid #443a66;
-      background: #14102a; color: #f0ecff; font-size: 15px; margin-bottom: 14px; text-align: center;
-    }
-    #login button {
-      width: 100%; padding: 11px; border-radius: 8px; border: none; cursor: pointer;
-      background: linear-gradient(135deg,#ffe27a,#ffb347); color: #221a08; font-weight: 700; font-size: 15px;
-    }
-    #login button:disabled { opacity: 0.5; cursor: not-allowed; }
-    #login .status { color: #ff8a8a; font-size: 12px; margin-top: 10px; min-height: 16px; }
-    #login .pickLabel { color: #b9b0d9; font-size: 12px; margin: 4px 0 8px; }
-    #login .basicNote { color: #ffe27a; font-size: 11px; margin: 8px 0 2px; background: rgba(255,226,122,0.08); border: 1px solid rgba(255,226,122,0.25); border-radius: 8px; padding: 6px 8px; }
-    #pickGrid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 14px; }
-    #pickGrid .pick { background: rgba(255,255,255,0.04); border: 2px solid #443a66; border-radius: 10px; padding: 10px 6px; cursor: pointer; text-align: center; }
-    #pickGrid .pick .nm { font-size: 12px; color: #f0ecff; font-weight: 700; }
-    #pickGrid .pick .rn { font-size: 9px; margin-top: 3px; }
-    #pickGrid .pick.selected { border-color: #ffe27a; background: rgba(255,226,122,0.14); }
 
-    #hud { position: fixed; inset: 0; pointer-events: none; font-family: 'Segoe UI', Tahoma, sans-serif; color: #f0ecff; z-index: 10; display: none; }
+    /* ---------------- lobby ---------------- */
+    #login { position: fixed; inset: 0; z-index: 20; overflow-y: auto; padding: 16px;
+      background: radial-gradient(circle at 50% 0%, #3a5a2a 0%, #1f2e17 45%, #120d08 100%); }
+    #login .card { max-width: 980px; margin: 0 auto; background: var(--panel); border: 3px solid var(--edge); border-radius: 12px;
+      box-shadow: 0 0 0 3px #2a1c10, 0 20px 60px rgba(0,0,0,0.6); padding: 18px 20px 20px; }
+    #login h1 { margin: 0; text-align: center; color: var(--gold); font-size: 30px; letter-spacing: 2px; text-shadow: 0 3px 0 #7a4a12; }
+    #login .sub { text-align: center; color: var(--muted); font-size: 13px; margin: 2px 0 14px; }
+    .steps { display: flex; gap: 6px; justify-content: center; margin-bottom: 14px; flex-wrap: wrap; }
+    .steps .st { font-size: 12px; padding: 5px 12px; border-radius: 20px; background: #2c2217; color: var(--muted); border: 1px solid #4a3622; }
+    .steps .st.on { background: #6b4a2b; color: #fff; border-color: var(--gold); }
+    .row { display: flex; gap: 10px; align-items: center; justify-content: center; margin-bottom: 12px; flex-wrap: wrap; }
+    #nameInput { width: 240px; padding: 10px 12px; border-radius: 8px; border: 2px solid #5a4028; background: #120d08; color: var(--ink); font-size: 15px; text-align: center; }
+    .grid { display: grid; gap: 10px; }
+    .heroes { grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); }
+    .skills { grid-template-columns: repeat(auto-fill, minmax(175px, 1fr)); }
+    .tile { background: #231a10; border: 2px solid #4a3622; border-radius: 10px; padding: 10px; cursor: pointer; text-align: center; transition: transform .12s, border-color .12s, background .12s; position: relative; }
+    .tile:hover { transform: translateY(-3px); border-color: #8a6a3a; }
+    .tile.sel { border-color: var(--gold); background: #3b2b17; box-shadow: 0 0 16px rgba(255,209,102,0.35); }
+    .tile.sel::after { content: '✓'; position: absolute; top: 6px; left: 8px; color: var(--gold); font-weight: 900; }
+    .tile .face { width: 76px; height: 76px; margin: 0 auto 6px; border: 2px solid #5a4028; border-radius: 8px; background: #120d08; }
+    .tile .walker { width: 48px; height: 48px; margin: 0 auto 4px; background-repeat: no-repeat; background-size: 192px 336px; background-position: 0 0; }
+    .tile.sel .walker, .tile:hover .walker { animation: walk .6s steps(4) infinite; }
+    @keyframes walk { from { background-position-y: 0; } to { background-position-y: -192px; } }
+    .tile .nm { font-weight: 700; font-size: 14px; }
+    .tile .ps { font-size: 11px; color: var(--gold); margin-top: 3px; }
+    .tile .ds { font-size: 11px; color: var(--muted); margin-top: 5px; line-height: 1.45; min-height: 32px; }
+    .tile .ico { margin: 0 auto 6px; }
+    .tile .tag { display: inline-block; font-size: 10px; padding: 1px 7px; border-radius: 10px; background: #120d08; margin-top: 4px; }
+    .legend .tile { border-color: #6b5320; }
+    .legend .tile.sel { border-color: #ffb800; background: #402d0c; box-shadow: 0 0 22px rgba(255,184,0,0.45); }
+    .combos { margin-top: 12px; background: #1a130b; border: 1px dashed #5a4028; border-radius: 10px; padding: 10px 12px; font-size: 12px; }
+    .combos b { color: var(--gold); }
+    .combos .cb { display: inline-block; margin: 3px 8px 3px 0; padding: 3px 8px; border-radius: 6px; background: #2a1f13; }
+    .nav { display: flex; justify-content: space-between; gap: 10px; margin-top: 16px; }
+    .btn { padding: 11px 22px; border-radius: 8px; border: none; cursor: pointer; font-weight: 800; font-size: 15px; }
+    .btn.primary { background: linear-gradient(180deg,#ffd166,#e89b2a); color: #2a1a05; box-shadow: 0 3px 0 #8a5510; }
+    .btn.ghost { background: #2c2217; color: var(--ink); border: 1px solid #5a4028; }
+    .btn:disabled { opacity: .45; cursor: not-allowed; }
+    .counter { text-align: center; color: var(--gold); font-size: 13px; margin-bottom: 8px; }
+    #loginStatus { color: #ff8a8a; text-align: center; font-size: 13px; margin-top: 8px; min-height: 18px; }
+
+    /* ---------------- HUD ---------------- */
+    #hud { position: fixed; inset: 0; pointer-events: none; z-index: 10; display: none; }
     #hud.active { display: block; }
     .panel { position: absolute; pointer-events: none; }
+    .wood { background: var(--panel); border: 2px solid var(--edge); border-radius: 10px; box-shadow: 0 0 0 2px #2a1c10; }
+    #dmgFlash { inset: 0; background: radial-gradient(ellipse at center, rgba(255,40,40,0) 45%, rgba(200,20,20,0.5) 100%); opacity: 0; transition: opacity .25s; }
 
-    #dmgFlash { inset: 0; background: radial-gradient(ellipse at center, rgba(255,40,40,0) 40%, rgba(255,30,30,0.55) 100%); opacity: 0; transition: opacity .25s; }
+    #vitals { left: 12px; bottom: 12px; padding: 8px; display: flex; gap: 8px; align-items: center; }
+    #vitals .face { width: 56px; height: 56px; border: 2px solid var(--edge); border-radius: 8px; background: #120d08; }
+    #vitals .bars { width: 190px; }
+    .bar { direction: ltr; height: 12px; background: #120d08; border-radius: 4px; overflow: hidden; margin-bottom: 4px; border: 1px solid #3a2a18; }
+    #hpFill { height: 100%; width: 100%; background: linear-gradient(90deg,#e84a4a,#ff8b5e); transition: width .12s; }
+    #shieldFill { height: 100%; width: 100%; background: linear-gradient(90deg,#4aa8e8,#8affd9); transition: width .12s; }
+    #statsLine { font-size: 12px; color: var(--muted); }
+    #selfStatus { font-size: 15px; min-height: 18px; }
 
-    #vitals { left: 16px; bottom: 16px; width: 240px; }
-    #vitals .bar-track { background: rgba(255,255,255,0.08); border-radius: 6px; height: 14px; margin-bottom: 6px; overflow: hidden; border: 1px solid rgba(255,255,255,0.15); }
-    #hpFill { height: 100%; width: 100%; background: linear-gradient(90deg,#ff5e5e,#ff9a5e); transition: width 0.15s; }
-    #shieldFill { height: 100%; width: 100%; background: linear-gradient(90deg,#5ecbff,#8affc9); transition: width 0.15s; }
-    #vitals .label { font-size: 11px; color: #b9b0d9; margin-bottom: 2px; }
-    #statsLine { margin-top: 6px; font-size: 12px; color: #d8d2ee; text-shadow: 0 1px 2px #000; }
+    #topbar { top: 10px; left: 50%; transform: translateX(-50%); text-align: center; padding: 5px 16px; }
+    #timer { font-size: 22px; font-weight: 800; color: var(--gold); }
+    #remaining { font-size: 11px; color: var(--muted); }
 
-    #topbar { top: 12px; left: 50%; transform: translateX(-50%); text-align: center; }
-    #timer { font-size: 22px; font-weight: 700; color: #ffe27a; text-shadow: 0 2px 6px #000; }
-    #remaining { font-size: 12px; color: #b9b0d9; }
+    #hotbar { left: 50%; bottom: 12px; transform: translateX(-50%); display: flex; gap: 7px; padding: 7px; align-items: flex-end; }
+    .slot { width: 58px; height: 58px; border-radius: 9px; background: #120d08; border: 2px solid #5a4028; position: relative; overflow: hidden; pointer-events: auto; cursor: pointer; touch-action: none; display: flex; align-items: center; justify-content: center; }
+    .slot.legend { width: 70px; height: 70px; border-color: #ffb800; box-shadow: 0 0 12px rgba(255,184,0,.4); }
+    .slot .ico { pointer-events: none; }
+    .slot .key { position: absolute; top: 1px; right: 4px; font-size: 10px; font-weight: 800; color: #fff; text-shadow: 0 1px 2px #000; z-index: 2; }
+    .slot .cd { position: absolute; inset: 0; background: rgba(0,0,0,0.68); display: flex; align-items: center; justify-content: center; font-size: 16px; font-weight: 800; z-index: 3; }
+    .slot .cdbar { position: absolute; left: 0; bottom: 0; height: 100%; background: rgba(0,0,0,0.55); z-index: 1; }
 
-    #hotbar { left: 50%; bottom: 14px; transform: translateX(-50%); display: flex; gap: 8px; }
-    .slot { width: 56px; height: 56px; border-radius: 10px; background: rgba(20,16,36,0.85); backdrop-filter: blur(2px); border: 2px solid rgba(255,255,255,0.15); position: relative; text-align: center; overflow: hidden; pointer-events: auto; cursor: pointer; touch-action: none; }
-    .slot .key { position: absolute; top: 2px; right: 4px; font-size: 10px; color: #fff; opacity: 0.7; z-index: 2; text-shadow: 0 1px 2px #000; }
-    .slot .nm { position: absolute; bottom: 2px; width: 100%; font-size: 8px; color: #fff; line-height: 1.15; z-index: 2; text-shadow: 0 1px 2px #000; }
-    .slot .cd { position: absolute; inset: 0; background: rgba(0,0,0,0.65); display: flex; align-items: center; justify-content: center; font-size: 13px; font-weight: 700; z-index: 3; }
-    .slot.basic { border-color: #ffe27a; box-shadow: 0 0 8px rgba(255,226,122,0.35); }
-    .slot-icon-img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; opacity: 0.9; z-index: 1; }
+    #passives { right: 12px; bottom: 12px; padding: 6px 8px; max-width: 230px; }
+    #passives .ttl { font-size: 10px; color: var(--muted); margin-bottom: 3px; }
+    #passives .p { font-size: 12px; display: inline-flex; gap: 3px; align-items: center; background: #231a10; border: 1px solid #4a3622; border-radius: 6px; padding: 2px 6px; margin: 2px; }
 
-    #passives { right: 16px; bottom: 16px; text-align: right; }
-    #passives .p { font-size: 11px; color: #ffe27a; background: rgba(20,16,36,0.7); border-radius: 6px; padding: 3px 8px; margin-bottom: 4px; display: inline-block; }
+    #killfeed { right: 12px; top: 12px; width: 240px; }
+    #killfeed .k { font-size: 12px; background: rgba(28,22,14,0.85); border-right: 3px solid var(--gold); border-radius: 6px; padding: 4px 8px; margin-bottom: 4px; }
+    #playersLeft { left: 12px; top: 12px; font-size: 13px; color: var(--gold); padding: 6px 10px; }
+    #helpBtn { left: 12px; top: 50px; pointer-events: auto; cursor: pointer; font-size: 12px; padding: 5px 10px; }
+    #helpPanel { left: 12px; top: 86px; width: 260px; padding: 10px; font-size: 12px; display: none; }
+    #helpPanel.show { display: block; }
+    #helpPanel .cb { margin-bottom: 5px; }
+    #helpPanel b { color: var(--gold); }
 
-    #killfeed { right: 16px; top: 16px; width: 220px; text-align: right; }
-    #killfeed .k { font-size: 12px; background: rgba(20,16,36,0.65); backdrop-filter: blur(2px); border-radius: 6px; padding: 4px 8px; margin-bottom: 4px; }
-
-    #playersLeft { left: 16px; top: 16px; font-size: 13px; color: #ffe27a; background: rgba(20,16,36,0.65); backdrop-filter: blur(2px); border-radius: 8px; padding: 6px 10px; }
-
-    #bossBar { left: 50%; top: 54px; transform: translateX(-50%); width: 300px; text-align: center; display: none; }
+    #bossBar { left: 50%; top: 66px; transform: translateX(-50%); width: 300px; text-align: center; display: none; padding: 5px 8px; }
     #bossBar.show { display: block; }
-    #bossBar .track { background: rgba(255,255,255,0.1); height: 10px; border-radius: 5px; overflow: hidden; border: 1px solid rgba(255,80,120,0.4); }
-    #bossBar .fill { height: 100%; background: linear-gradient(90deg,#ff3d81,#ff8a4c); width: 100%; box-shadow: 0 0 10px rgba(255,61,129,0.6); }
-    #bossBar .lbl { font-size: 12px; color: #ff8fb3; margin-bottom: 2px; }
-
-    #banner { left: 50%; top: 90px; transform: translateX(-50%); font-size: 15px; font-weight: 700; color: #ffe27a; text-shadow: 0 2px 8px #000; opacity: 0; transition: opacity 0.3s; text-align: center; }
+    #bossBar .fill { height: 100%; background: linear-gradient(90deg,#ff3d81,#ff8a4c); width: 100%; }
+    #bossBar .lbl { font-size: 12px; color: #ff9fbf; margin-bottom: 3px; }
+    #banner { left: 50%; top: 110px; transform: translateX(-50%); font-size: 17px; font-weight: 800; color: var(--gold); text-shadow: 0 2px 6px #000; opacity: 0; transition: opacity .3s; text-align: center; white-space: nowrap; }
     #banner.show { opacity: 1; }
+    #toast { left: 50%; bottom: 100px; transform: translateX(-50%); padding: 8px 14px; font-size: 13px; opacity: 0; transition: opacity .25s; text-align: center; display: flex; gap: 8px; align-items: center; }
+    #toast.show { opacity: 1; }
+    #bossPrompt { left: 50%; bottom: 100px; transform: translateX(-50%); font-size: 12px; color: #ff9fbf; opacity: 0; padding: 6px 14px; }
+    #bossPrompt.show { opacity: 1; pointer-events: auto; cursor: pointer; }
 
-    #huntBanner { left: 50%; top: 70px; transform: translateX(-50%) scale(0.9); text-align: center; opacity: 0; transition: opacity .3s, transform .3s; }
-    #huntBanner.show { opacity: 1; transform: translateX(-50%) scale(1); }
-    #huntBanner .huntTitle { font-size: 20px; font-weight: 800; color: #ff5e7a; text-shadow: 0 0 12px rgba(255,61,129,0.8), 0 2px 6px #000; letter-spacing: 1px; animation: huntPulse 1s ease-in-out infinite; }
-    #huntBanner .huntSub { font-size: 11px; color: #ffb199; margin-top: 2px; letter-spacing: 3px; }
-    #huntBanner .huntTarget { margin-top: 6px; font-size: 15px; color: #ffe27a; background: rgba(30,10,20,0.6); border: 1px solid rgba(255,61,129,0.4); border-radius: 8px; padding: 4px 14px; display: inline-block; }
-    #huntBanner .huntCountdown { margin-top: 6px; font-size: 26px; font-weight: 800; color: #ff8fb3; text-shadow: 0 0 10px rgba(255,61,129,0.7); }
-    @keyframes huntPulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.6; } }
+    #waiting, #roundEnd { position: fixed; inset: 0; display: none; align-items: center; justify-content: center; z-index: 15; pointer-events: none; }
+    #waiting.show, #roundEnd.show { display: flex; }
+    #waiting .box, #roundEnd .box { padding: 20px 28px; text-align: center; min-width: 280px; max-width: 92vw; }
+    #roundEnd table { border-collapse: collapse; margin-top: 10px; width: 100%; }
+    #roundEnd td, #roundEnd th { padding: 4px 8px; font-size: 13px; text-align: center; }
+    #roundEnd th { color: var(--gold); }
+    #roundEnd img { width: 24px; height: 24px; vertical-align: middle; }
 
-    #passiveToast { left: 50%; bottom: 122px; transform: translateX(-50%) translateY(10px); opacity: 0; transition: opacity .25s, transform .25s; text-align: center; }
-    #passiveToast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
-    #passiveToast .ptHead { font-size: 10px; letter-spacing: 2px; color: #ffe27a; margin-bottom: 4px; }
-    #passiveToast .ptBody { display: flex; align-items: center; gap: 10px; background: rgba(20,16,36,0.92); border: 1px solid rgba(255,226,122,0.35); border-radius: 12px; padding: 8px 14px; box-shadow: 0 0 20px rgba(255,226,122,0.12); }
-    #passiveToast .ptIcon { font-size: 22px; }
-    #passiveToast .ptText { text-align: right; }
-    #passiveToast .ptName { font-size: 13px; font-weight: 700; color: #f0ecff; }
-    #passiveToast .ptDesc { font-size: 10px; color: #b9b0d9; max-width: 180px; }
-
-    #bossPrompt { left: 50%; bottom: 82px; transform: translateX(-50%); font-size: 12px; color: #ff8fb3; opacity: 0; background: rgba(255,61,129,0.15); border: 1px solid rgba(255,61,129,0.5); border-radius: 8px; padding: 6px 14px; }
-    #bossPrompt.show { opacity: 1; pointer-events: auto; cursor: pointer; touch-action: none; }
-
-    #waiting, #roundEnd, #upgradeModal { position: fixed; inset: 0; display: none; align-items: center; justify-content: center; pointer-events: none; z-index: 15; }
-    #waiting.show, #roundEnd.show, #upgradeModal.show { display: flex; pointer-events: auto; }
-    #waiting .box, #roundEnd .box, #upgradeModal .box { background: rgba(15,12,28,0.92); border: 1px solid rgba(255,226,122,0.25); border-radius: 14px; padding: 24px 30px; text-align: center; min-width: 260px; max-width: 90vw; box-sizing: border-box; }
-    #upgradeModal.show { background: rgba(4,2,12,0.4); backdrop-filter: blur(6px) brightness(0.65); }
-    #upgradeModal .box { box-shadow: 0 0 40px rgba(120,80,255,0.15); }
-
-    /* narrow / phone-portrait layout: the bottom HUD row (vitals + hotbar + passives)
-       doesn't fit side-by-side under ~560px, so stack the hotbar above it instead. */
-    @media (max-width: 560px) {
-      #vitals { width: 140px; }
-      #vitals .bar-track { height: 11px; margin-bottom: 4px; }
-      #statsLine { font-size: 10px; margin-top: 4px; }
-      #hotbar { bottom: 96px; gap: 6px; }
-      .slot { width: 46px; height: 46px; }
-      .slot .nm { font-size: 7px; }
-      #passives { max-width: 110px; right: 10px; }
-      #passives .p { font-size: 9px; padding: 2px 6px; margin-bottom: 3px; }
-      #killfeed { width: 140px; font-size: 10px; }
-      #playersLeft { font-size: 11px; padding: 5px 8px; }
-      #bossPrompt { bottom: 148px; }
-      #passiveToast { bottom: 168px; }
+    @media (max-width: 640px) {
+      #vitals .bars { width: 120px; } #vitals .face { width: 42px; height: 42px; }
+      #hotbar { bottom: 92px; gap: 5px; } .slot { width: 48px; height: 48px; } .slot.legend { width: 56px; height: 56px; }
+      #passives { max-width: 140px; } #killfeed { width: 160px; font-size: 10px; }
+      #toast, #bossPrompt { bottom: 160px; }
     }
-    #roundEnd table { border-collapse: collapse; margin-top: 10px; }
-    #roundEnd td, #roundEnd th { padding: 4px 10px; font-size: 13px; text-align: center; }
-    #roundEnd th { color: #ffe27a; }
-
-    #upgradeModal .opts { display: flex; gap: 14px; margin-top: 16px; flex-wrap: wrap; justify-content: center; }
-    #upgradeModal .opt {
-      --rc: #c9d6ff;
-      background: linear-gradient(160deg, rgba(255,255,255,0.06), rgba(255,255,255,0.01));
-      border: 2px solid var(--rc);
-      border-radius: 14px;
-      padding: 16px 14px;
-      cursor: pointer;
-      min-width: 130px;
-      max-width: 150px;
-      box-shadow: 0 0 14px var(--rc);
-      transition: transform .15s ease, box-shadow .15s ease, opacity .15s ease;
-    }
-    #upgradeModal .opt:hover { transform: translateY(-6px) scale(1.04); box-shadow: 0 4px 22px var(--rc); }
-    #upgradeModal .opt.picked { transform: scale(0.9); opacity: 0.35; }
-    #upgradeModal .opt-icon { font-size: 26px; margin-bottom: 4px; }
-    #upgradeModal .opt-icon-img { width: 56px; height: 56px; object-fit: cover; border-radius: 10px; margin-bottom: 4px; box-shadow: 0 0 14px var(--rc); border: 1px solid rgba(255,255,255,0.25); }
-    #upgradeModal .opt-name { font-size: 14px; font-weight: 700; color: #f0ecff; }
-    #upgradeModal .opt-rarity { font-size: 9px; margin-top: 2px; color: var(--rc); letter-spacing: 1px; }
-    #upgradeModal .opt-desc { font-size: 10px; color: #b9b0d9; margin-top: 8px; line-height: 1.4; min-height: 40px; }
-    #upgradeModal .opt-meta { font-size: 10px; color: #ffe27a; margin-top: 6px; }
   </style>
 </head>
 <body>
   <div id="login">
     <div class="card">
-      <h1>CHAOS.IO</h1>
-      <p>ساحة القدرات — آخر ناجٍ يفوز</p>
-      <input id="nameInput" maxlength="16" placeholder="اسمك" />
-      <div class="pickLabel">اختر قدرتين تبدأ بيهم (٢ من ٤)</div>
-      <div id="pickGrid"></div>
-      <div class="basicNote">⚡ عندك دائمًا "الضربة الأساسية" مجانًا — Space أو كبسة الفأرة</div>
-      <button id="joinBtn" disabled>ادخل الساحة</button>
-      <div class="status" id="loginStatus"></div>
+      <h1>⚔ CHAOS.IO</h1>
+      <div class="sub">ساحة الأبطال — اختر بطلك وقدراتك، آخر ناجٍ يفوز</div>
+      <div class="steps" id="steps"></div>
+      <div id="stepBody"></div>
+      <div class="nav">
+        <button class="btn ghost" id="backBtn">رجوع</button>
+        <button class="btn primary" id="nextBtn">التالي</button>
+      </div>
+      <div id="loginStatus"></div>
     </div>
   </div>
   <div id="game"></div>
 
   <div id="hud">
     <div class="panel" id="dmgFlash"></div>
-    <div class="panel" id="playersLeft">اللاعبون: --</div>
-    <div class="panel" id="topbar"><div id="timer">--:--</div><div id="remaining">بانتظار الجولة</div></div>
-    <div class="panel" id="bossBar"><div class="lbl" id="bossLbl">الوحش</div><div class="track"><div class="fill" id="bossFill"></div></div></div>
+    <div class="panel wood" id="playersLeft">اللاعبون: --</div>
+    <div class="panel wood" id="helpBtn">📜 الكومبوهات</div>
+    <div class="panel wood" id="helpPanel"></div>
+    <div class="panel wood" id="topbar"><div id="timer">--:--</div><div id="remaining"></div></div>
+    <div class="panel wood" id="bossBar"><div class="lbl" id="bossLbl">الوحش</div><div class="bar"><div class="fill" id="bossFill"></div></div></div>
     <div class="panel" id="banner"></div>
-    <div class="panel" id="huntBanner">
-      <div class="huntTitle">⚠ بدأ الصيد ⚠</div>
-      <div class="huntSub">اصطادوا البطل</div>
-      <div class="huntTarget">الهدف: <span id="huntTargetName">--</span></div>
-      <div class="huntCountdown" id="huntCountdown">20</div>
-    </div>
-    <div class="panel" id="vitals">
-      <div class="label">الصحة</div>
-      <div class="bar-track"><div id="hpFill"></div></div>
-      <div class="label">الدرع</div>
-      <div class="bar-track"><div id="shieldFill"></div></div>
-      <div id="statsLine">القتلات: 0 | النقاط: 0</div>
-    </div>
-    <div class="panel" id="hotbar"></div>
-    <div class="panel" id="bossPrompt">اضغط R لإطلاق انفجار الوحش!</div>
-    <div class="panel" id="passiveToast">
-      <div class="ptHead">قدرة جانبية جديدة</div>
-      <div class="ptBody">
-        <div class="ptIcon" id="passiveToastIcon">✨</div>
-        <div class="ptText">
-          <div class="ptName" id="passiveToastName">--</div>
-          <div class="ptDesc" id="passiveToastDesc"></div>
-        </div>
+    <div class="panel wood" id="toast"></div>
+    <div class="panel wood" id="vitals">
+      <div class="face px" id="selfFace"></div>
+      <div class="bars">
+        <div class="bar"><div id="hpFill"></div></div>
+        <div class="bar"><div id="shieldFill"></div></div>
+        <div id="selfStatus"></div>
+        <div id="statsLine">القتلات: 0</div>
       </div>
     </div>
-    <div class="panel" id="passives"></div>
+    <div class="panel wood" id="hotbar"></div>
+    <div class="panel wood" id="bossPrompt">👑 أنت الوحش! اضغط R للانفجار</div>
+    <div class="panel wood" id="passives"></div>
     <div class="panel" id="killfeed"></div>
   </div>
 
-  <div id="waiting"><div class="box"><h2 style="color:#ffe27a;margin:0 0 8px;">بانتظار اللاعبين...</h2><div id="waitingCountdown" style="font-size:32px;font-weight:700;">--</div></div></div>
-
-  <div id="roundEnd"><div class="box">
-    <h2 id="reTitle" style="color:#ffe27a;margin:0;">انتهت الجولة</h2>
+  <div id="waiting"><div class="box wood"><h2 style="color:var(--gold);margin:0 0 8px;">بانتظار اللاعبين...</h2><div id="waitingCountdown" style="font-size:30px;font-weight:800;">--</div></div></div>
+  <div id="roundEnd"><div class="box wood">
+    <h2 id="reTitle" style="color:var(--gold);margin:0;">انتهت الجولة</h2>
     <table id="reTable"></table>
-    <div style="margin-top:14px;color:#9d95b8;font-size:12px;">الجولة القادمة تبدأ تلقائيًا...</div>
-  </div></div>
-
-  <div id="upgradeModal"><div class="box">
-    <h3 style="color:#ffe27a;margin:0 0 4px;">⚡ اختر قوتك</h3>
-    <div style="font-size:12px;color:#9d95b8;">لديك 9 ثوانٍ للاختيار</div>
-    <div class="opts" id="upgradeOpts"></div>
+    <div style="margin-top:12px;color:var(--muted);font-size:12px;">الجولة القادمة تبدأ تلقائيًا...</div>
   </div></div>
 
   <script type="module" src="./src/main.js"></script>
