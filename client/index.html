@@ -41,6 +41,8 @@
     #hud.active { display: block; }
     .panel { position: absolute; pointer-events: none; }
 
+    #dmgFlash { inset: 0; background: radial-gradient(ellipse at center, rgba(255,40,40,0) 40%, rgba(255,30,30,0.55) 100%); opacity: 0; transition: opacity .25s; }
+
     #vitals { left: 16px; bottom: 16px; width: 240px; }
     #vitals .bar-track { background: rgba(255,255,255,0.08); border-radius: 6px; height: 14px; margin-bottom: 6px; overflow: hidden; border: 1px solid rgba(255,255,255,0.15); }
     #hpFill { height: 100%; width: 100%; background: linear-gradient(90deg,#ff5e5e,#ff9a5e); transition: width 0.15s; }
@@ -53,9 +55,9 @@
     #remaining { font-size: 12px; color: #b9b0d9; }
 
     #hotbar { left: 50%; bottom: 14px; transform: translateX(-50%); display: flex; gap: 8px; }
-    .slot { width: 56px; height: 56px; border-radius: 10px; background: rgba(20,16,36,0.85); border: 2px solid rgba(255,255,255,0.15); position: relative; text-align: center; overflow: hidden; pointer-events: auto; cursor: pointer; touch-action: none; }
+    .slot { width: 56px; height: 56px; border-radius: 10px; background: rgba(20,16,36,0.85); backdrop-filter: blur(2px); border: 2px solid rgba(255,255,255,0.15); position: relative; text-align: center; overflow: hidden; pointer-events: auto; cursor: pointer; touch-action: none; }
     .slot .key { position: absolute; top: 2px; right: 4px; font-size: 10px; color: #fff; opacity: 0.7; }
-    .slot .nm { position: absolute; bottom: 2px; width: 100%; font-size: 9px; color: #fff; }
+    .slot .nm { position: absolute; bottom: 2px; width: 100%; font-size: 8px; color: #fff; line-height: 1.15; }
     .slot .cd { position: absolute; inset: 0; background: rgba(0,0,0,0.65); display: flex; align-items: center; justify-content: center; font-size: 13px; font-weight: 700; }
     .slot.basic { border-color: #ffe27a; box-shadow: 0 0 8px rgba(255,226,122,0.35); }
 
@@ -63,18 +65,35 @@
     #passives .p { font-size: 11px; color: #ffe27a; background: rgba(20,16,36,0.7); border-radius: 6px; padding: 3px 8px; margin-bottom: 4px; display: inline-block; }
 
     #killfeed { right: 16px; top: 16px; width: 220px; text-align: right; }
-    #killfeed .k { font-size: 12px; background: rgba(20,16,36,0.65); border-radius: 6px; padding: 4px 8px; margin-bottom: 4px; }
+    #killfeed .k { font-size: 12px; background: rgba(20,16,36,0.65); backdrop-filter: blur(2px); border-radius: 6px; padding: 4px 8px; margin-bottom: 4px; }
 
-    #playersLeft { left: 16px; top: 16px; font-size: 13px; color: #ffe27a; background: rgba(20,16,36,0.65); border-radius: 8px; padding: 6px 10px; }
+    #playersLeft { left: 16px; top: 16px; font-size: 13px; color: #ffe27a; background: rgba(20,16,36,0.65); backdrop-filter: blur(2px); border-radius: 8px; padding: 6px 10px; }
 
     #bossBar { left: 50%; top: 54px; transform: translateX(-50%); width: 300px; text-align: center; display: none; }
     #bossBar.show { display: block; }
     #bossBar .track { background: rgba(255,255,255,0.1); height: 10px; border-radius: 5px; overflow: hidden; border: 1px solid rgba(255,80,120,0.4); }
-    #bossBar .fill { height: 100%; background: linear-gradient(90deg,#ff3d81,#ff8a4c); width: 100%; }
+    #bossBar .fill { height: 100%; background: linear-gradient(90deg,#ff3d81,#ff8a4c); width: 100%; box-shadow: 0 0 10px rgba(255,61,129,0.6); }
     #bossBar .lbl { font-size: 12px; color: #ff8fb3; margin-bottom: 2px; }
 
     #banner { left: 50%; top: 90px; transform: translateX(-50%); font-size: 15px; font-weight: 700; color: #ffe27a; text-shadow: 0 2px 8px #000; opacity: 0; transition: opacity 0.3s; text-align: center; }
     #banner.show { opacity: 1; }
+
+    #huntBanner { left: 50%; top: 70px; transform: translateX(-50%) scale(0.9); text-align: center; opacity: 0; transition: opacity .3s, transform .3s; }
+    #huntBanner.show { opacity: 1; transform: translateX(-50%) scale(1); }
+    #huntBanner .huntTitle { font-size: 20px; font-weight: 800; color: #ff5e7a; text-shadow: 0 0 12px rgba(255,61,129,0.8), 0 2px 6px #000; letter-spacing: 1px; animation: huntPulse 1s ease-in-out infinite; }
+    #huntBanner .huntSub { font-size: 11px; color: #ffb199; margin-top: 2px; letter-spacing: 3px; }
+    #huntBanner .huntTarget { margin-top: 6px; font-size: 15px; color: #ffe27a; background: rgba(30,10,20,0.6); border: 1px solid rgba(255,61,129,0.4); border-radius: 8px; padding: 4px 14px; display: inline-block; }
+    #huntBanner .huntCountdown { margin-top: 6px; font-size: 26px; font-weight: 800; color: #ff8fb3; text-shadow: 0 0 10px rgba(255,61,129,0.7); }
+    @keyframes huntPulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.6; } }
+
+    #passiveToast { left: 50%; bottom: 122px; transform: translateX(-50%) translateY(10px); opacity: 0; transition: opacity .25s, transform .25s; text-align: center; }
+    #passiveToast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+    #passiveToast .ptHead { font-size: 10px; letter-spacing: 2px; color: #ffe27a; margin-bottom: 4px; }
+    #passiveToast .ptBody { display: flex; align-items: center; gap: 10px; background: rgba(20,16,36,0.92); border: 1px solid rgba(255,226,122,0.35); border-radius: 12px; padding: 8px 14px; box-shadow: 0 0 20px rgba(255,226,122,0.12); }
+    #passiveToast .ptIcon { font-size: 22px; }
+    #passiveToast .ptText { text-align: right; }
+    #passiveToast .ptName { font-size: 13px; font-weight: 700; color: #f0ecff; }
+    #passiveToast .ptDesc { font-size: 10px; color: #b9b0d9; max-width: 180px; }
 
     #bossPrompt { left: 50%; bottom: 82px; transform: translateX(-50%); font-size: 12px; color: #ff8fb3; opacity: 0; background: rgba(255,61,129,0.15); border: 1px solid rgba(255,61,129,0.5); border-radius: 8px; padding: 6px 14px; }
     #bossPrompt.show { opacity: 1; pointer-events: auto; cursor: pointer; touch-action: none; }
@@ -82,6 +101,8 @@
     #waiting, #roundEnd, #upgradeModal { position: fixed; inset: 0; display: none; align-items: center; justify-content: center; pointer-events: none; z-index: 15; }
     #waiting.show, #roundEnd.show, #upgradeModal.show { display: flex; pointer-events: auto; }
     #waiting .box, #roundEnd .box, #upgradeModal .box { background: rgba(15,12,28,0.92); border: 1px solid rgba(255,226,122,0.25); border-radius: 14px; padding: 24px 30px; text-align: center; min-width: 260px; max-width: 90vw; box-sizing: border-box; }
+    #upgradeModal.show { background: rgba(4,2,12,0.4); backdrop-filter: blur(6px) brightness(0.65); }
+    #upgradeModal .box { box-shadow: 0 0 40px rgba(120,80,255,0.15); }
 
     /* narrow / phone-portrait layout: the bottom HUD row (vitals + hotbar + passives)
        doesn't fit side-by-side under ~560px, so stack the hotbar above it instead. */
@@ -91,20 +112,38 @@
       #statsLine { font-size: 10px; margin-top: 4px; }
       #hotbar { bottom: 96px; gap: 6px; }
       .slot { width: 46px; height: 46px; }
-      .slot .nm { font-size: 8px; }
+      .slot .nm { font-size: 7px; }
       #passives { max-width: 110px; right: 10px; }
       #passives .p { font-size: 9px; padding: 2px 6px; margin-bottom: 3px; }
       #killfeed { width: 140px; font-size: 10px; }
       #playersLeft { font-size: 11px; padding: 5px 8px; }
       #bossPrompt { bottom: 148px; }
+      #passiveToast { bottom: 168px; }
     }
     #roundEnd table { border-collapse: collapse; margin-top: 10px; }
     #roundEnd td, #roundEnd th { padding: 4px 10px; font-size: 13px; text-align: center; }
     #roundEnd th { color: #ffe27a; }
-    #upgradeModal .opts { display: flex; gap: 10px; margin-top: 14px; }
-    #upgradeModal .opt { background: rgba(255,226,122,0.1); border: 1px solid rgba(255,226,122,0.4); border-radius: 10px; padding: 12px 14px; cursor: pointer; min-width: 110px; }
-    #upgradeModal .opt:hover { background: rgba(255,226,122,0.22); }
-    #upgradeModal .opt .rn { font-size: 10px; margin-top: 4px; }
+
+    #upgradeModal .opts { display: flex; gap: 14px; margin-top: 16px; flex-wrap: wrap; justify-content: center; }
+    #upgradeModal .opt {
+      --rc: #c9d6ff;
+      background: linear-gradient(160deg, rgba(255,255,255,0.06), rgba(255,255,255,0.01));
+      border: 2px solid var(--rc);
+      border-radius: 14px;
+      padding: 16px 14px;
+      cursor: pointer;
+      min-width: 130px;
+      max-width: 150px;
+      box-shadow: 0 0 14px var(--rc);
+      transition: transform .15s ease, box-shadow .15s ease, opacity .15s ease;
+    }
+    #upgradeModal .opt:hover { transform: translateY(-6px) scale(1.04); box-shadow: 0 4px 22px var(--rc); }
+    #upgradeModal .opt.picked { transform: scale(0.9); opacity: 0.35; }
+    #upgradeModal .opt-icon { font-size: 26px; margin-bottom: 4px; }
+    #upgradeModal .opt-name { font-size: 14px; font-weight: 700; color: #f0ecff; }
+    #upgradeModal .opt-rarity { font-size: 9px; margin-top: 2px; color: var(--rc); letter-spacing: 1px; }
+    #upgradeModal .opt-desc { font-size: 10px; color: #b9b0d9; margin-top: 8px; line-height: 1.4; min-height: 40px; }
+    #upgradeModal .opt-meta { font-size: 10px; color: #ffe27a; margin-top: 6px; }
   </style>
 </head>
 <body>
@@ -123,10 +162,17 @@
   <div id="game"></div>
 
   <div id="hud">
+    <div class="panel" id="dmgFlash"></div>
     <div class="panel" id="playersLeft">اللاعبون: --</div>
     <div class="panel" id="topbar"><div id="timer">--:--</div><div id="remaining">بانتظار الجولة</div></div>
     <div class="panel" id="bossBar"><div class="lbl" id="bossLbl">الوحش</div><div class="track"><div class="fill" id="bossFill"></div></div></div>
     <div class="panel" id="banner"></div>
+    <div class="panel" id="huntBanner">
+      <div class="huntTitle">⚠ بدأ الصيد ⚠</div>
+      <div class="huntSub">اصطادوا البطل</div>
+      <div class="huntTarget">الهدف: <span id="huntTargetName">--</span></div>
+      <div class="huntCountdown" id="huntCountdown">20</div>
+    </div>
     <div class="panel" id="vitals">
       <div class="label">الصحة</div>
       <div class="bar-track"><div id="hpFill"></div></div>
@@ -136,6 +182,16 @@
     </div>
     <div class="panel" id="hotbar"></div>
     <div class="panel" id="bossPrompt">اضغط R لإطلاق انفجار الوحش!</div>
+    <div class="panel" id="passiveToast">
+      <div class="ptHead">قدرة جانبية جديدة</div>
+      <div class="ptBody">
+        <div class="ptIcon" id="passiveToastIcon">✨</div>
+        <div class="ptText">
+          <div class="ptName" id="passiveToastName">--</div>
+          <div class="ptDesc" id="passiveToastDesc"></div>
+        </div>
+      </div>
+    </div>
     <div class="panel" id="passives"></div>
     <div class="panel" id="killfeed"></div>
   </div>
@@ -149,7 +205,7 @@
   </div></div>
 
   <div id="upgradeModal"><div class="box">
-    <h3 style="color:#ffe27a;margin:0 0 4px;">اختر قدرة جديدة</h3>
+    <h3 style="color:#ffe27a;margin:0 0 4px;">⚡ اختر قوتك</h3>
     <div style="font-size:12px;color:#9d95b8;">لديك 9 ثوانٍ للاختيار</div>
     <div class="opts" id="upgradeOpts"></div>
   </div></div>
