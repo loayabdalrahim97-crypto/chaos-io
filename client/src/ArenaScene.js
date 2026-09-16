@@ -1,5 +1,5 @@
 import Phaser from 'phaser';
-import { ABILITIES, RARITY_COLOR, PASSIVES } from './abilityData.js';
+import { ABILITIES, RARITY_COLOR, PASSIVES, BASIC_ABILITY_ID } from './abilityData.js';
 import { playSfx, castSfxFor } from './audio.js';
 
 // Physical-keycode map (not e.key) so WASD/number/R bindings work regardless of the
@@ -12,6 +12,7 @@ const CODE_TO_ACTION = {
   KeyD: 'right', ArrowRight: 'right',
   Digit1: 'slot0', Digit2: 'slot1', Digit3: 'slot2', Digit4: 'slot3',
   KeyR: 'bossNova',
+  Space: 'basic',
 };
 
 const RING_HEX = (h) => parseInt(h.replace('#', ''), 16);
@@ -41,7 +42,13 @@ export default class ArenaScene extends Phaser.Scene {
     this.moveTouch = null; // {id, baseX, baseY, curX, curY}
     this.aimPointer = null; // right-side touch pointer used for aim, if any
     this.input.on('pointerdown', (p) => {
-      if (p.pointerType !== 'touch') return;
+      if (p.pointerType !== 'touch') {
+        // desktop: left-click anywhere on the canvas fires the basic attack (DOM elements
+        // like the hotbar sit above the canvas and swallow the click before it gets here,
+        // so this never double-fires with the hotbar's own delegated tap-to-cast).
+        if (p.leftButtonDown()) this.castBasic();
+        return;
+      }
       if (p.x < this.scale.width * 0.52) this.moveTouch = { id: p.id, baseX: p.x, baseY: p.y, curX: p.x, curY: p.y };
       else this.aimPointer = p;
     });
@@ -56,7 +63,9 @@ export default class ArenaScene extends Phaser.Scene {
     // tap-to-cast: delegate clicks on the hotbar/boss-prompt DOM overlay
     document.getElementById('hotbar').addEventListener('pointerdown', (e) => {
       const slot = e.target.closest('.slot');
-      if (slot) this.castSlot(Number(slot.dataset.idx));
+      if (!slot) return;
+      if (slot.dataset.idx === 'basic') this.castBasic();
+      else this.castSlot(Number(slot.dataset.idx));
     });
     document.getElementById('bossPrompt').addEventListener('pointerdown', () => this.castBossNova());
 
@@ -108,8 +117,10 @@ export default class ArenaScene extends Phaser.Scene {
       this.keys[action] = down;
       return;
     }
+    if (action === 'basic') e.preventDefault(); // stop Space from scrolling the page
     if (!down) return; // fire actions only on keydown
     if (action === 'bossNova') { this.castBossNova(); return; }
+    if (action === 'basic') { this.castBasic(); return; }
     this.castSlot(Number(action.replace('slot', '')));
   }
 
@@ -133,6 +144,13 @@ export default class ArenaScene extends Phaser.Scene {
     this.room.send('cast', { abilityId: 'boss_nova', tx: me.x, ty: me.y });
   }
 
+  castBasic() {
+    const me = this.room.state.players.get(this.myId);
+    if (!me || !me.alive) return;
+    const world = this.getAimWorld();
+    this.room.send('cast', { abilityId: BASIC_ABILITY_ID, tx: world.x, ty: world.y });
+  }
+
   nameOf(id) { const p = this.room.state.players.get(id); return p ? p.name : '???'; }
 
   onCastFx(m) {
@@ -142,9 +160,10 @@ export default class ArenaScene extends Phaser.Scene {
     if (def.telegraph > 0) {
       this.localEffects.push({ kind: 'telegraph', x: m.tx, y: m.ty, radius: def.radius || 40, color: def.color, start: now, dur: def.telegraph });
     }
-    if (m.abilityId === 'fireball') {
+    if (m.abilityId === 'fireball' || m.abilityId === BASIC_ABILITY_ID) {
       const dir = Math.atan2(m.ty - m.y, m.tx - m.x);
-      this.localEffects.push({ kind: 'projectile', x: m.x, y: m.y, vx: Math.cos(dir) * 620, vy: Math.sin(dir) * 620, color: def.color, start: now, dur: 1500 });
+      const spd = def.speed || 620;
+      this.localEffects.push({ kind: 'projectile', x: m.x, y: m.y, vx: Math.cos(dir) * spd, vy: Math.sin(dir) * spd, color: def.color, start: now, dur: 1200 });
     } else if (m.abilityId === 'firewave' || m.abilityId === 'tsunami') {
       const dir = Math.atan2(m.ty - m.y, m.tx - m.x);
       this.localEffects.push({ kind: 'wave', ox: m.x, oy: m.y, dx: Math.cos(dir), dy: Math.sin(dir), speed: m.abilityId === 'tsunami' ? 500 : 640, width: m.abilityId === 'tsunami' ? 180 : 90, color: def.color, start: now + def.telegraph, dur: 2600 });
@@ -421,6 +440,15 @@ export default class ArenaScene extends Phaser.Scene {
     const h = this.hud;
     const now = Date.now();
     const slots = [];
+    {
+      const bcd = (me.cooldowns.get ? me.cooldowns.get(BASIC_ABILITY_ID) : me.cooldowns[BASIC_ABILITY_ID]) || 0;
+      const bLeft = Math.max(0, Math.ceil((bcd - now) / 1000));
+      slots.push(`<div class="slot basic" data-idx="basic">
+        <div class="key">Space</div>
+        <div class="nm">${ABILITIES[BASIC_ABILITY_ID].nameAr}</div>
+        ${bLeft > 0 ? `<div class="cd">${bLeft}</div>` : ''}
+      </div>`);
+    }
     for (let i = 0; i < 4; i++) {
       const id = me.abilities[i];
       const def = id ? ABILITIES[id] : null;
