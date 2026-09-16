@@ -1,0 +1,148 @@
+<!doctype html>
+<html lang="ar" dir="rtl">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <title>CHAOS.IO — ساحة القدرات</title>
+  <style>
+    html, body { margin: 0; padding: 0; background: #07060d; overflow: hidden; height: 100%; }
+    #game { width: 100vw; height: 100vh; }
+    #login {
+      position: fixed; inset: 0; display: flex; align-items: center; justify-content: center;
+      background: radial-gradient(circle at 50% 30%, #1c1430 0%, #07060d 70%);
+      font-family: 'Segoe UI', Tahoma, sans-serif; z-index: 20;
+    }
+    #login .card {
+      background: rgba(20,16,36,0.9); border: 1px solid rgba(255,226,122,0.25);
+      border-radius: 16px; padding: 32px 36px; text-align: center; min-width: 280px;
+      box-shadow: 0 0 40px rgba(255,200,120,0.08);
+    }
+    #login h1 { color: #ffe27a; margin: 0 0 6px; font-size: 26px; letter-spacing: 1px; }
+    #login p { color: #9d95b8; margin: 0 0 18px; font-size: 13px; }
+    #login input {
+      width: 100%; box-sizing: border-box; padding: 10px 12px; border-radius: 8px; border: 1px solid #443a66;
+      background: #14102a; color: #f0ecff; font-size: 15px; margin-bottom: 14px; text-align: center;
+    }
+    #login button {
+      width: 100%; padding: 11px; border-radius: 8px; border: none; cursor: pointer;
+      background: linear-gradient(135deg,#ffe27a,#ffb347); color: #221a08; font-weight: 700; font-size: 15px;
+    }
+    #login button:disabled { opacity: 0.5; cursor: wait; }
+    #login .status { color: #ff8a8a; font-size: 12px; margin-top: 10px; min-height: 16px; }
+
+    #hud { position: fixed; inset: 0; pointer-events: none; font-family: 'Segoe UI', Tahoma, sans-serif; color: #f0ecff; z-index: 10; display: none; }
+    #hud.active { display: block; }
+    .panel { position: absolute; pointer-events: none; }
+
+    #vitals { left: 16px; bottom: 16px; width: 240px; }
+    #vitals .bar-track { background: rgba(255,255,255,0.08); border-radius: 6px; height: 14px; margin-bottom: 6px; overflow: hidden; border: 1px solid rgba(255,255,255,0.15); }
+    #hpFill { height: 100%; width: 100%; background: linear-gradient(90deg,#ff5e5e,#ff9a5e); transition: width 0.15s; }
+    #shieldFill { height: 100%; width: 100%; background: linear-gradient(90deg,#5ecbff,#8affc9); transition: width 0.15s; }
+    #vitals .label { font-size: 11px; color: #b9b0d9; margin-bottom: 2px; }
+    #statsLine { margin-top: 6px; font-size: 12px; color: #d8d2ee; text-shadow: 0 1px 2px #000; }
+
+    #topbar { top: 12px; left: 50%; transform: translateX(-50%); text-align: center; }
+    #timer { font-size: 22px; font-weight: 700; color: #ffe27a; text-shadow: 0 2px 6px #000; }
+    #remaining { font-size: 12px; color: #b9b0d9; }
+
+    #hotbar { left: 50%; bottom: 14px; transform: translateX(-50%); display: flex; gap: 8px; }
+    .slot { width: 56px; height: 56px; border-radius: 10px; background: rgba(20,16,36,0.85); border: 2px solid rgba(255,255,255,0.15); position: relative; text-align: center; overflow: hidden; pointer-events: auto; cursor: pointer; touch-action: none; }
+    .slot .key { position: absolute; top: 2px; right: 4px; font-size: 10px; color: #fff; opacity: 0.7; }
+    .slot .nm { position: absolute; bottom: 2px; width: 100%; font-size: 9px; color: #fff; }
+    .slot .cd { position: absolute; inset: 0; background: rgba(0,0,0,0.65); display: flex; align-items: center; justify-content: center; font-size: 13px; font-weight: 700; }
+
+    #passives { right: 16px; bottom: 16px; text-align: right; }
+    #passives .p { font-size: 11px; color: #ffe27a; background: rgba(20,16,36,0.7); border-radius: 6px; padding: 3px 8px; margin-bottom: 4px; display: inline-block; }
+
+    #killfeed { right: 16px; top: 16px; width: 220px; text-align: right; }
+    #killfeed .k { font-size: 12px; background: rgba(20,16,36,0.65); border-radius: 6px; padding: 4px 8px; margin-bottom: 4px; }
+
+    #playersLeft { left: 16px; top: 16px; font-size: 13px; color: #ffe27a; background: rgba(20,16,36,0.65); border-radius: 8px; padding: 6px 10px; }
+
+    #bossBar { left: 50%; top: 54px; transform: translateX(-50%); width: 300px; text-align: center; display: none; }
+    #bossBar.show { display: block; }
+    #bossBar .track { background: rgba(255,255,255,0.1); height: 10px; border-radius: 5px; overflow: hidden; border: 1px solid rgba(255,80,120,0.4); }
+    #bossBar .fill { height: 100%; background: linear-gradient(90deg,#ff3d81,#ff8a4c); width: 100%; }
+    #bossBar .lbl { font-size: 12px; color: #ff8fb3; margin-bottom: 2px; }
+
+    #banner { left: 50%; top: 90px; transform: translateX(-50%); font-size: 15px; font-weight: 700; color: #ffe27a; text-shadow: 0 2px 8px #000; opacity: 0; transition: opacity 0.3s; text-align: center; }
+    #banner.show { opacity: 1; }
+
+    #bossPrompt { left: 50%; bottom: 82px; transform: translateX(-50%); font-size: 12px; color: #ff8fb3; opacity: 0; background: rgba(255,61,129,0.15); border: 1px solid rgba(255,61,129,0.5); border-radius: 8px; padding: 6px 14px; }
+    #bossPrompt.show { opacity: 1; pointer-events: auto; cursor: pointer; touch-action: none; }
+
+    #waiting, #roundEnd, #upgradeModal { position: fixed; inset: 0; display: none; align-items: center; justify-content: center; pointer-events: none; z-index: 15; }
+    #waiting.show, #roundEnd.show, #upgradeModal.show { display: flex; pointer-events: auto; }
+    #waiting .box, #roundEnd .box, #upgradeModal .box { background: rgba(15,12,28,0.92); border: 1px solid rgba(255,226,122,0.25); border-radius: 14px; padding: 24px 30px; text-align: center; min-width: 260px; max-width: 90vw; box-sizing: border-box; }
+
+    /* narrow / phone-portrait layout: the bottom HUD row (vitals + hotbar + passives)
+       doesn't fit side-by-side under ~560px, so stack the hotbar above it instead. */
+    @media (max-width: 560px) {
+      #vitals { width: 140px; }
+      #vitals .bar-track { height: 11px; margin-bottom: 4px; }
+      #statsLine { font-size: 10px; margin-top: 4px; }
+      #hotbar { bottom: 96px; gap: 6px; }
+      .slot { width: 46px; height: 46px; }
+      .slot .nm { font-size: 8px; }
+      #passives { max-width: 110px; right: 10px; }
+      #passives .p { font-size: 9px; padding: 2px 6px; margin-bottom: 3px; }
+      #killfeed { width: 140px; font-size: 10px; }
+      #playersLeft { font-size: 11px; padding: 5px 8px; }
+      #bossPrompt { bottom: 148px; }
+    }
+    #roundEnd table { border-collapse: collapse; margin-top: 10px; }
+    #roundEnd td, #roundEnd th { padding: 4px 10px; font-size: 13px; text-align: center; }
+    #roundEnd th { color: #ffe27a; }
+    #upgradeModal .opts { display: flex; gap: 10px; margin-top: 14px; }
+    #upgradeModal .opt { background: rgba(255,226,122,0.1); border: 1px solid rgba(255,226,122,0.4); border-radius: 10px; padding: 12px 14px; cursor: pointer; min-width: 110px; }
+    #upgradeModal .opt:hover { background: rgba(255,226,122,0.22); }
+    #upgradeModal .opt .rn { font-size: 10px; margin-top: 4px; }
+  </style>
+</head>
+<body>
+  <div id="login">
+    <div class="card">
+      <h1>CHAOS.IO</h1>
+      <p>ساحة القدرات — آخر ناجٍ يفوز</p>
+      <input id="nameInput" maxlength="16" placeholder="اسمك" />
+      <button id="joinBtn">ادخل الساحة</button>
+      <div class="status" id="loginStatus"></div>
+    </div>
+  </div>
+  <div id="game"></div>
+
+  <div id="hud">
+    <div class="panel" id="playersLeft">اللاعبون: --</div>
+    <div class="panel" id="topbar"><div id="timer">--:--</div><div id="remaining">بانتظار الجولة</div></div>
+    <div class="panel" id="bossBar"><div class="lbl" id="bossLbl">الوحش</div><div class="track"><div class="fill" id="bossFill"></div></div></div>
+    <div class="panel" id="banner"></div>
+    <div class="panel" id="vitals">
+      <div class="label">الصحة</div>
+      <div class="bar-track"><div id="hpFill"></div></div>
+      <div class="label">الدرع</div>
+      <div class="bar-track"><div id="shieldFill"></div></div>
+      <div id="statsLine">القتلات: 0 | النقاط: 0</div>
+    </div>
+    <div class="panel" id="hotbar"></div>
+    <div class="panel" id="bossPrompt">اضغط R لإطلاق انفجار الوحش!</div>
+    <div class="panel" id="passives"></div>
+    <div class="panel" id="killfeed"></div>
+  </div>
+
+  <div id="waiting"><div class="box"><h2 style="color:#ffe27a;margin:0 0 8px;">بانتظار اللاعبين...</h2><div id="waitingCountdown" style="font-size:32px;font-weight:700;">--</div></div></div>
+
+  <div id="roundEnd"><div class="box">
+    <h2 id="reTitle" style="color:#ffe27a;margin:0;">انتهت الجولة</h2>
+    <table id="reTable"></table>
+    <div style="margin-top:14px;color:#9d95b8;font-size:12px;">الجولة القادمة تبدأ تلقائيًا...</div>
+  </div></div>
+
+  <div id="upgradeModal"><div class="box">
+    <h3 style="color:#ffe27a;margin:0 0 4px;">اختر قدرة جديدة</h3>
+    <div style="font-size:12px;color:#9d95b8;">لديك 9 ثوانٍ للاختيار</div>
+    <div class="opts" id="upgradeOpts"></div>
+  </div></div>
+
+  <script type="module" src="/src/main.js"></script>
+</body>
+</html>
