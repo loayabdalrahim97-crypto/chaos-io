@@ -1,91 +1,72 @@
-// Data-driven ability definitions — server-authoritative (the client only reads
-// these to render icons/text; damage/cooldown/telegraph are ALWAYS enforced here).
-// Add ability #13, #14, #50 by adding an entry below — nothing else needs to change.
+// Server-authoritative game data: heroes, 10 normal abilities, 10 legendary abilities,
+// 10 passives, status effects and combos. The client mirrors ids/names for display only.
+
+// ---- heroes: each has a look (sprite sheet id on the client) and an innate passive.
+// Killing a player steals one of their passives, so the hero you pick matters.
+export const HEROES = {
+  shadow:   { id: 'shadow',   nameAr: 'كاغي الظل',     passive: 'swift' },
+  knight:   { id: 'knight',   nameAr: 'الفارس الحديدي', passive: 'stoneskin' },
+  crimson:  { id: 'crimson',  nameAr: 'القرمزي',       passive: 'bloodlust' },
+  bones:    { id: 'bones',    nameAr: 'العظمي',        passive: 'vampiric' },
+  sakura:   { id: 'sakura',   nameAr: 'ساكورا',        passive: 'quickhands' },
+  frost:    { id: 'frost',    nameAr: 'ابن الثلج',     passive: 'frosttouch' },
+  golem:    { id: 'golem',    nameAr: 'الروبوت الذهبي', passive: 'thorns' },
+  sage:     { id: 'sage',     nameAr: 'الحكيم',        passive: 'regen' },
+  fox:      { id: 'fox',      nameAr: 'الذئب الأبيض',  passive: 'crit' },
+  explorer: { id: 'explorer', nameAr: 'المستكشف',      passive: 'laststand' },
+};
+export const HERO_IDS = Object.keys(HEROES);
+
+// ---- 10 normal abilities (pick 3 before the match) ----
+// `applies` = status effect put on whoever gets hit (drives the combo system)
 export const ABILITIES = {
-  dash: {
-    id: 'dash', nameAr: 'اندفاع', nameEn: 'DASH', type: 'MOBILITY', rarity: 'COMMON',
-    cooldown: 6000, castTime: 0, range: 220, damage: 0, radius: 0, desc: 'اندفاعة سريعة باتجاه الحركة مع حصانة لحظية.'
-  },
-  shield: {
-    id: 'shield', nameAr: 'الدرع', nameEn: 'SHIELD', type: 'DEFENSIVE', rarity: 'COMMON',
-    cooldown: 12000, castTime: 0, duration: 2200, damage: 0, radius: 0, desc: 'حصانة كاملة من كل الأضرار لمدة قصيرة.'
-  },
-  fireball: {
-    id: 'fireball', nameAr: 'كرة النار', nameEn: 'FIREBALL', type: 'OFFENSIVE', rarity: 'COMMON',
-    cooldown: 4500, castTime: 0, speed: 620, damage: 16, radius: 26, desc: 'مقذوف ناري سريع باتجاه الماوس — أول من يصطدم به يتضرر.'
-  },
-  meteor: {
-    id: 'meteor', nameAr: 'النيزك', nameEn: 'METEOR', type: 'AREA', rarity: 'EPIC',
-    cooldown: 10000, telegraph: 1100, damage: 34, radius: 95, desc: 'حدد منطقة — بعد إنذار واضح ينزل نيزك ضخم.'
-  },
-  lightning: {
-    id: 'lightning', nameAr: 'البرق', nameEn: 'LIGHTNING', type: 'OFFENSIVE', rarity: 'RARE',
-    cooldown: 7000, telegraph: 750, damage: 30, radius: 55, desc: 'يستهدف أقرب عدو بدائرة تحذير — إذا لم يتحرك يتضرر بشدة.'
-  },
-  blackhole: {
-    id: 'blackhole', nameAr: 'الثقب الأسود', nameEn: 'BLACK HOLE', type: 'CONTROL', rarity: 'RARE',
-    cooldown: 11000, telegraph: 600, pull: 1000, damage: 22, radius: 70, desc: 'يسحب من حوله لمدة ثانية ثم ينفجر.'
-  },
-  freeze: {
-    id: 'freeze', nameAr: 'منطقة التجميد', nameEn: 'FREEZE ZONE', type: 'CONTROL', rarity: 'RARE',
-    cooldown: 10000, telegraph: 400, duration: 2500, slowMult: 0.4, damage: 6, radius: 110, desc: 'منطقة تبطئ حركة من بداخلها بشدة.'
-  },
-  teleport: {
-    id: 'teleport', nameAr: 'الانتقال', nameEn: 'TELEPORT', type: 'MOBILITY', rarity: 'RARE',
-    cooldown: 9000, telegraph: 350, range: 380, damage: 0, radius: 0, desc: 'انتقال فوري لمسافة أبعد من الاندفاع، بإنذار قصير قبله.'
-  },
-  firewave: {
-    id: 'firewave', nameAr: 'موجة النار', nameEn: 'FIRE WAVE', type: 'AREA', rarity: 'RARE',
-    cooldown: 9500, telegraph: 700, speed: 640, width: 90, damage: 26, desc: 'موجة نار تجتاح الخريطة بالكامل باتجاه الماوس.'
-  },
-  mine: {
-    id: 'mine', nameAr: 'الفخ', nameEn: 'MINE', type: 'TRICK', rarity: 'COMMON',
-    cooldown: 8000, lifetime: 12000, damage: 24, radius: 50, desc: 'فخ غير مرئي تقريبًا — ينفجر بأول من يمر فوقه.'
-  },
-  tsunami: {
-    id: 'tsunami', nameAr: 'تسونامي', nameEn: 'TSUNAMI', type: 'GLOBAL', rarity: 'LEGENDARY',
-    cooldown: 26000, telegraph: 1000, speed: 500, width: 180, damage: 42, desc: 'موجة عملاقة تعبر جزءًا كبيرًا من الخريطة — ضرر كبير وعريض.'
-  },
+  fireball:    { id: 'fireball',    cooldown: 4000,  speed: 640, damage: 14, radius: 8,  range: 900, applies: 'burn' },
+  ice_shard:   { id: 'ice_shard',   cooldown: 4500,  speed: 760, damage: 12, radius: 8,  range: 900, applies: 'chill' },
+  lightning:   { id: 'lightning',   cooldown: 6000,  telegraph: 450, damage: 18, radius: 60, range: 520, applies: 'shock' },
+  water_splash:{ id: 'water_splash',cooldown: 6000,  damage: 8,  radius: 115, reach: 70, knock: 110, applies: 'wet' },
+  gust:        { id: 'gust',        cooldown: 7000,  speed: 820, width: 90, length: 560, damage: 8, knock: 170, applies: 'airborne' },
+  dash:        { id: 'dash',        cooldown: 6000,  range: 230, damage: 0 },
+  shield:      { id: 'shield',      cooldown: 12000, duration: 2000, damage: 0 },
+  trap:        { id: 'trap',        cooldown: 8000,  lifetime: 14000, damage: 16, radius: 46, applies: 'root', range: 380 },
+  hunter_mark: { id: 'hunter_mark', cooldown: 5000,  speed: 950, damage: 8, radius: 7, range: 1100, applies: 'mark' },
+  heal_spring: { id: 'heal_spring', cooldown: 13000, heal: 28, duration: 2000, damage: 0 },
 };
-export const ABILITY_IDS = Object.keys(ABILITIES);
+export const NORMAL_IDS = Object.keys(ABILITIES);
+export const PICKS_REQUIRED = 3;
 
-// Temporary ability granted only to whoever is currently the Boss Hunt target —
-// never offered as a normal upgrade, never placed in a player's `abilities` array.
-export const BOSS_ABILITIES = {
-  boss_nova: {
-    id: 'boss_nova', nameAr: 'انفجار الوحش', nameEn: 'BOSS NOVA', type: 'OFFENSIVE', rarity: 'LEGENDARY',
-    cooldown: 6000, telegraph: 500, damage: 26, radius: 150, desc: 'انفجار قوي حول الوحش يضرب كل من يقترب منه.'
-  },
+// ---- 10 legendary abilities (pick 1, kept all match, key Q / 4) ----
+export const LEGENDS = {
+  meteor_storm:  { id: 'meteor_storm',  cooldown: 28000, count: 5, spread: 150, telegraph: 900, damage: 18, radius: 72, range: 600, applies: 'burn' },
+  tsunami:       { id: 'tsunami',       cooldown: 30000, telegraph: 700, speed: 520, width: 210, damage: 26, knock: 220, applies: 'wet' },
+  black_hole:    { id: 'black_hole',    cooldown: 28000, telegraph: 1400, pullRadius: 270, damage: 30, radius: 115, range: 560 },
+  thunderstorm:  { id: 'thunderstorm',  cooldown: 30000, telegraph: 650, damage: 20, radius: 480, applies: 'shock' },
+  ice_age:       { id: 'ice_age',       cooldown: 30000, telegraph: 500, damage: 16, radius: 250, applies: 'chill' },
+  dragon_breath: { id: 'dragon_breath', cooldown: 26000, ticks: 3, tickMs: 300, damage: 12, radius: 370, arc: 0.62, applies: 'burn' },
+  shadow_strike: { id: 'shadow_strike', cooldown: 28000, targets: 3, damage: 22, radius: 460, hopMs: 260 },
+  kings_fortress:{ id: 'kings_fortress',cooldown: 32000, duration: 3000, heal: 30, speedMult: 1.4 },
+  earth_prison:  { id: 'earth_prison',  cooldown: 26000, telegraph: 500, damage: 20, radius: 170, rootMs: 2200, range: 560 },
+  fate_arrow:    { id: 'fate_arrow',    cooldown: 26000, telegraph: 250, speed: 1150, damage: 45, radius: 22, range: 2000, applies: 'mark' },
 };
+export const LEGEND_IDS = Object.keys(LEGENDS);
 
-export const STARTER_ABILITIES = ['dash', 'shield']; // fallback if a client sends no/invalid picks
-export const MAX_ABILITY_SLOTS = 4;
+// boss-only ability during a Boss Hunt
+export const BOSS_ABILITY = { id: 'boss_nova', cooldown: 6000, telegraph: 500, damage: 26, radius: 150 };
 
-// The pre-join loadout picker offers exactly these COMMON abilities — balanced enough
-// to let a new player choose their own starting pair (the original "you pick your
-// abilities" concept) without handing out something round-swinging on spawn.
-export const PICKABLE_STARTERS = ['dash', 'shield', 'fireball', 'mine'];
-export const PICKS_REQUIRED = 2;
+// always-available basic attack (shuriken)
+export const BASIC_ABILITY = { id: 'strike', cooldown: 750, speed: 760, damage: 7, radius: 7, range: 620 };
 
-// Always-available basic attack — separate from the chosen/unlocked loadout entirely,
-// never occupies a hotbar slot, never offered as an upgrade, can't be unequipped.
-export const BASIC_ABILITY = {
-  id: 'strike', nameAr: 'الضربة الأساسية', nameEn: 'STRIKE', type: 'OFFENSIVE', rarity: 'BASIC',
-  cooldown: 900, speed: 700, damage: 7, radius: 16, desc: 'هجوم أساسي بسيط، كولداون قصير — متاح دائمًا لكل لاعب.'
-};
+// ---- passives (every hero starts with one; kills steal them) ----
+export const PASSIVE_IDS = ['swift', 'stoneskin', 'bloodlust', 'vampiric', 'quickhands', 'frosttouch', 'thorns', 'regen', 'crit', 'laststand'];
 
-export const PASSIVES = {
-  bloodlust:  { id: 'bloodlust',  nameAr: 'نهم الدم',     nameEn: 'BLOODLUST',   desc: '+15% سرعة لمدة 5 ثوانٍ بعد كل قتل.' },
-  vampiric:   { id: 'vampiric',   nameAr: 'الامتصاص',      nameEn: 'VAMPIRIC',    desc: 'يشفيك 12% من كل ضرر تسببه.' },
-  quickhands: { id: 'quickhands', nameAr: 'اليد السريعة',  nameEn: 'QUICK HANDS', desc: 'كل الكولداون أسرع بنسبة 15%.' },
-  laststand:  { id: 'laststand',  nameAr: 'الصمود الأخير', nameEn: 'LAST STAND',  desc: '+25% سرعة إذا هبطت صحتك دون 30%.' },
-  thorns:     { id: 'thorns',     nameAr: 'الأشواك',       nameEn: 'THORNS',      desc: '15% من الضرر الذي يصيبك يرتد على المهاجم.' },
-};
-export const PASSIVE_IDS = Object.keys(PASSIVES);
-export const MAX_PASSIVE_SLOTS = 3;
+// ---- status effects ----
+export const STATUS_MS = { burn: 3000, chill: 2500, wet: 4500, shock: 2000, airborne: 500, root: 1500, mark: 5000, stun: 1000 };
+export const BURN_DPS = 4;
+export const CHILL_SLOW = 0.6;   // speed multiplier while chilled
+export const WET_SLOW = 0.85;
 
-export const MAX_HP = 100;
-export const MAX_SHIELD = 45;
+export const MAX_HP = 150;
+export const MAX_SHIELD = 50;
 export const SHIELD_REGEN_DELAY = 4500;
-export const SHIELD_REGEN_RATE = 11; // per second
-export const PLAYER_SPEED = 230;
+export const SHIELD_REGEN_RATE = 10;
+export const PLAYER_SPEED = 215;
+export const PLAYER_RADIUS = 14;
