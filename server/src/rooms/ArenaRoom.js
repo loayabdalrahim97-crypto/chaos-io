@@ -1,163 +1,139 @@
 import colyseus from 'colyseus';
 const { Room } = colyseus;
-import { ArenaState, Player } from '../schema/state.js';
+import { ArenaState, Player, Prop } from '../schema/state.js';
 import {
-  ABILITIES, ABILITY_IDS, STARTER_ABILITIES, MAX_ABILITY_SLOTS,
-  PASSIVES, PASSIVE_IDS, MAX_PASSIVE_SLOTS, BOSS_ABILITIES,
-  PICKABLE_STARTERS, PICKS_REQUIRED, BASIC_ABILITY,
-  MAX_HP, MAX_SHIELD, SHIELD_REGEN_DELAY, SHIELD_REGEN_RATE, PLAYER_SPEED,
+  HEROES, HERO_IDS, ABILITIES, NORMAL_IDS, PICKS_REQUIRED, LEGENDS, LEGEND_IDS, BOSS_ABILITY, BASIC_ABILITY,
+  PASSIVE_IDS, STATUS_MS, BURN_DPS, CHILL_SLOW, WET_SLOW,
+  MAX_HP, MAX_SHIELD, SHIELD_REGEN_DELAY, SHIELD_REGEN_RATE, PLAYER_SPEED, PLAYER_RADIUS,
 } from '../abilities.js';
+import { MAP_W, MAP_H, LAYOUT, mapPayload, resolveCircle, pointBlocked, propAt, inWater, inBush, randomOpenPoint } from '../map.js';
 
-// Validate a client-submitted starting loadout: must be exactly PICKS_REQUIRED unique
-// ids drawn from PICKABLE_STARTERS. Anything else (missing, malformed, abilities the
-// client isn't allowed to start with) falls back to the default pair — never trust
-// the client to hand us a legal loadout.
-function sanitizePicks(raw) {
-  if (!Array.isArray(raw)) return null;
-  const uniq = [...new Set(raw.filter((id) => PICKABLE_STARTERS.includes(id)))];
-  return uniq.length === PICKS_REQUIRED ? uniq : null;
-}
-
-const TICK_MS = 50; // 20Hz server simulation — plenty for an arena this size
-const ROUND_TIME = 150; // seconds
-const GRACE_MS = 5000;
+const TICK_MS = 50;
+const ROUND_TIME = 180;
+const GRACE_MS = 4000;
 const BOT_FILL_WAIT_MS = 7000;
 const RESTART_DELAY_MS = 9000;
-const UPGRADE_INTERVAL_MS = 65000;
-const UPGRADE_OFFER_TIMEOUT_MS = 9000;
-const ORB_INTERVAL_MS = 20000;
-const ORB_LIFETIME_MS = 14000;
-const BOSS_FIRST_MS = 34000;
+const BOSS_FIRST_MS = 45000;
 const BOSS_COOLDOWN_MS = 60000;
 const BOSS_DURATION_MS = 20000;
-const BOSS_HP_BONUS = 90;
-const EVENT_FIRST_MS = 20000;
-const EVENT_COOLDOWN_MS = 34000;
-const SAFE_START_FRAC = 0.95;
-const SAFE_END_FRAC = 0.32;
+const BOSS_HP_BONUS = 110;
+const EVENT_FIRST_MS = 30000;
+const EVENT_COOLDOWN_MS = 40000;
+const SAFE_END_RADIUS = 250;
 const SAFE_TICK_DMG = 6;
 const SAFE_TICK_MS = 700;
+const PROP_HP = 30;
+const PICKUP_HEAL = 18;
 
-const RINGS = ['#ffe27a', '#c9d6ff', '#ffc9de', '#c9ffe0', '#e0c9ff', '#fff3c9'];
 const BOT_NAMES = ['المارد', 'الشبح', 'الغول', 'الفينيق', 'الذئب', 'الفارس', 'الكاهن', 'الصياد'];
-const EVENT_IDS = ['double_damage', 'chaos', 'no_abilities', 'meteor_shower'];
+const EVENT_IDS = ['double_damage', 'chaos', 'meteor_shower'];
 
-function dist(a, b) { const dx = a.x - b.x, dy = a.y - b.y; return Math.sqrt(dx * dx + dy * dy); }
-function clamp(v, a, b) { return Math.max(a, Math.min(b, v)); }
-function normalize(dx, dy) { const l = Math.sqrt(dx * dx + dy * dy); return l < 0.0001 ? { x: 1, y: 0 } : { x: dx / l, y: dy / l }; }
-function rand(a, b) { return a + Math.random() * (b - a); }
-function pointToSegmentDist(p, a, b) {
-  const abx = b.x - a.x, aby = b.y - a.y;
-  const len2 = abx * abx + aby * aby;
-  const t = len2 > 0 ? clamp(((p.x - a.x) * abx + (p.y - a.y) * aby) / len2, 0, 1) : 0;
-  const cx = a.x + abx * t, cy = a.y + aby * t;
-  return Math.sqrt((p.x - cx) * (p.x - cx) + (p.y - cy) * (p.y - cy));
+const dist = (a, b) => Math.hypot(a.x - b.x, a.y - b.y);
+const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
+const rand = (a, b) => a + Math.random() * (b - a);
+const pick = (arr) => arr[Math.floor(Math.random() * arr.length)];
+function normalize(dx, dy) { const l = Math.hypot(dx, dy); return l < 0.0001 ? { x: 1, y: 0 } : { x: dx / l, y: dy / l }; }
+function shuffle(a) { return a.slice().sort(() => Math.random() - 0.5); }
+
+function sanitizeLoadout(o) {
+  const hero = HERO_IDS.includes(o && o.hero) ? o.hero : pick(HERO_IDS);
+  let picks = Array.isArray(o && o.picks) ? [...new Set(o.picks.filter((id) => NORMAL_IDS.includes(id)))] : [];
+  if (picks.length !== PICKS_REQUIRED) picks = shuffle(NORMAL_IDS).slice(0, PICKS_REQUIRED);
+  const legend = LEGEND_IDS.includes(o && o.legend) ? o.legend : pick(LEGEND_IDS);
+  return { hero, picks, legend };
 }
 
 export class ArenaRoom extends Room {
-  maxClients = 5;
+  maxClients = 6;
 
   onCreate() {
     this.setState(new ArenaState());
-    this.state.arenaW = 1600;
-    this.state.arenaH = 1000;
+    this.state.arenaW = MAP_W;
+    this.state.arenaH = MAP_H;
+    LAYOUT.props.forEach((lp) => {
+      const pr = new Prop(); pr.id = lp.id; pr.kind = lp.kind; pr.x = lp.x; pr.y = lp.y; pr.hp = PROP_HP; pr.alive = true;
+      this.state.props.push(pr);
+    });
 
-    this.botState = new Map();   // sessionId -> AI runtime state (not synced)
-    this.effects = [];           // transient server-side effects being processed
-    this.mines = [];             // placed traps {x,y,caster,expiresAt,triggered}
-    this.pendingUpgrades = new Map(); // sessionId -> {options, timeout}
-    this.playerPicks = new Map(); // sessionId -> the 2 abilities they chose at join (survives round restarts)
+    this.botState = new Map();
+    this.loadouts = new Map();   // sessionId -> {hero,picks,legend}
+    this.effects = [];
+    this.projectiles = [];
+    this.traps = [];
+    this.pickups = [];
     this.botFillTimer = null;
     this.restartTimer = null;
-    this.nextUpgradeAt = 0;
-    this.nextOrbAt = 0;
-    this.nextBossAt = 0;
-    this.bossEndAt = 0;
     this.eventDamageMult = 1;
     this.eventCooldownMult = 1;
-    this.eventNoAbilitiesUntil = 0;
-    this.finalDuelAt = 0;
 
-    this.onMessage('input', (client, msg) => this.handleInput(client, msg));
-    this.onMessage('cast', (client, msg) => this.handleCast(client, msg));
-    this.onMessage('upgradeChoice', (client, msg) => this.handleUpgradeChoice(client, msg));
+    this.onMessage('input', (c, m) => this.handleInput(c, m));
+    this.onMessage('cast', (c, m) => this.handleCast(c, m));
+    this.onMessage('getMap', (c) => c.send('map', mapPayload()));
 
     this.setSimulationInterval((dt) => this.update(dt), TICK_MS);
   }
 
   onJoin(client, options) {
+    const lo = sanitizeLoadout(options);
     const p = new Player();
     p.id = client.sessionId;
-    p.name = (options && options.name ? String(options.name).slice(0, 16) : 'Player') || 'Player';
+    p.name = (options && options.name ? String(options.name).slice(0, 16) : '') || 'لاعب';
     p.isBot = false;
-    p.ring = RINGS[this.state.players.size % RINGS.length];
-    this.spawnPosition(p);
-    const picks = sanitizePicks(options && options.picks) || STARTER_ABILITIES.slice();
-    this.playerPicks.set(client.sessionId, picks);
-    p.abilities.push(...picks);
-    this.state.players.set(client.sessionId, p);
-
-    this.broadcast('toast', { text: `${p.name} joined the arena` });
-
+    this.loadouts.set(p.id, lo);
+    this.resetPlayer(p);
+    if (this.state.phase === 'playing') { p.alive = false; p.hp = 0; } // joins as spectator until next round
+    this.state.players.set(p.id, p);
     if (this.state.phase === 'waiting') this.checkStart();
   }
 
   onLeave(client) {
-    const p = this.state.players.get(client.sessionId);
-    if (p) {
-      this.broadcast('toast', { text: `${p.name} left` });
-      this.state.players.delete(client.sessionId);
-    }
-    this.pendingUpgrades.delete(client.sessionId);
-    this.playerPicks.delete(client.sessionId);
+    this.state.players.delete(client.sessionId);
+    this.loadouts.delete(client.sessionId);
+    if (this.state.phase === 'playing') this.checkRoundEnd();
     if (this.state.phase === 'waiting') this.checkStart();
+  }
+
+  liveProps() { return this.state.props.filter((pr) => pr.alive); }
+
+  resetPlayer(p) {
+    const lo = this.loadouts.get(p.id);
+    p.hero = lo.hero;
+    p.legend = lo.legend;
+    p.abilities.clear(); lo.picks.forEach((id) => p.abilities.push(id));
+    p.passives.clear(); p.passives.push(HEROES[lo.hero].passive);
+    p.hp = MAX_HP; p.maxHp = MAX_HP; p.shield = MAX_SHIELD; p.maxShield = MAX_SHIELD;
+    p.alive = true; p.kills = 0; p.score = 0; p.isBoss = false; p.invulnUntil = 0; p.fx = ''; p.hidden = false;
+    Array.from(p.cooldowns.keys()).forEach((k) => p.cooldowns.delete(k));
+    p._st = {}; p._mx = 0; p._my = 0; p._kbx = 0; p._kby = 0;
+    p._healUntil = 0; p._speedUntil = 0; p._speedMult = 1; p._empowerUntil = 0; p._lastHitAt = 0;
+    const spot = randomOpenPoint(Math.random, MAP_W / 2, MAP_H / 2, 560);
+    p.x = spot.x; p.y = spot.y; p.vx = 0; p.vy = 0;
   }
 
   // ---------------------------------------------------------------- lobby
   checkStart() {
-    const humanCount = [...this.state.players.values()].filter((p) => !p.isBot).length;
-    if (humanCount === 0) return;
-    if (this.state.players.size >= this.maxClients) {
-      this.beginCountdown(1500);
-      return;
-    }
-    if (!this.botFillTimer) {
-      this.state.countdown = Math.ceil(BOT_FILL_WAIT_MS / 1000);
-      this.botFillTimer = setTimeout(() => this.fillWithBotsAndStart(), BOT_FILL_WAIT_MS);
-    }
-  }
-  beginCountdown(ms) {
-    if (this.botFillTimer) { clearTimeout(this.botFillTimer); this.botFillTimer = null; }
-    this.state.countdown = Math.ceil(ms / 1000);
-    setTimeout(() => this.startMatch(), ms);
+    const humans = [...this.state.players.values()].filter((p) => !p.isBot).length;
+    if (humans === 0 || this.botFillTimer) return;
+    this.state.countdown = Math.ceil(BOT_FILL_WAIT_MS / 1000);
+    this.botFillTimer = setTimeout(() => this.fillWithBotsAndStart(), BOT_FILL_WAIT_MS);
   }
   fillWithBotsAndStart() {
     this.botFillTimer = null;
     if (this.state.phase !== 'waiting') return;
-    const names = BOT_NAMES.slice().sort(() => Math.random() - 0.5);
+    if (![...this.state.players.values()].some((p) => !p.isBot)) return;
+    const names = shuffle(BOT_NAMES);
+    const target = 5;
     let i = 0;
-    while (this.state.players.size < this.maxClients) {
+    while (this.state.players.size < target) {
       const id = 'bot_' + (i++) + '_' + Math.floor(Math.random() * 1e6);
       const p = new Player();
-      p.id = id;
-      p.name = names[i % names.length];
-      p.isBot = true;
-      p.ring = RINGS[this.state.players.size % RINGS.length];
-      this.spawnPosition(p);
-      const picks = PICKABLE_STARTERS.slice().sort(() => Math.random() - 0.5).slice(0, PICKS_REQUIRED);
-      this.playerPicks.set(id, picks);
-      p.abilities.push(...picks);
+      p.id = id; p.name = names[i % names.length]; p.isBot = true;
+      this.loadouts.set(id, sanitizeLoadout({}));
+      this.resetPlayer(p);
       this.state.players.set(id, p);
-      this.botState.set(id, { decisionAt: 0, decisionInterval: rand(220, 420), targetId: null, retargetAt: 0, wanderTarget: null, wanderUntil: 0, style: Math.random() < 0.5 ? 'aggressive' : 'cautious' });
+      this.botState.set(id, { decisionAt: 0, targetId: null, retargetAt: 0, wander: null, wanderUntil: 0, style: Math.random() < 0.5 ? 'aggressive' : 'cautious', strafe: Math.random() < 0.5 ? 1 : -1 });
     }
     this.startMatch();
-  }
-  spawnPosition(p) {
-    const W = this.state.arenaW, H = this.state.arenaH;
-    const ang = rand(0, Math.PI * 2);
-    const rad = Math.min(W, H) * rand(0.15, 0.4);
-    p.x = clamp(W / 2 + Math.cos(ang) * rad, 60, W - 60);
-    p.y = clamp(H / 2 + Math.sin(ang) * rad, 60, H - 60);
   }
 
   // ---------------------------------------------------------------- match lifecycle
@@ -167,566 +143,620 @@ export class ArenaRoom extends Room {
     this.state.phase = 'playing';
     this.state.remaining = ROUND_TIME;
     this.state.matchReadyAt = now + GRACE_MS;
-    this.state.safeRadius = Math.min(this.state.arenaW, this.state.arenaH) / 2 * SAFE_START_FRAC;
-    this.state.orbActive = false;
-    this.state.bossId = '';
-    this.state.bossHuntEndAt = 0;
-    this.state.eventId = '';
-    this.state.eventUntil = 0;
-    this.state.winnerId = '';
-    this.state.winnerName = '';
-    this.effects = [];
-    this.mines = [];
-    this.eventDamageMult = 1;
-    this.eventCooldownMult = 1;
-    this.eventNoAbilitiesUntil = 0;
+    this.state.safeRadius = Math.hypot(MAP_W, MAP_H) / 2;
+    this.state.bossId = ''; this.state.bossHuntEndAt = 0;
+    this.state.eventId = ''; this.state.eventUntil = 0;
+    this.state.winnerId = ''; this.state.winnerName = '';
+    this.effects = []; this.projectiles = []; this.traps = []; this.pickups = []; this.syncPickups();
+    this.eventDamageMult = 1; this.eventCooldownMult = 1;
     this.finalDuelAt = 0;
-    this.nextOrbAt = now + ORB_INTERVAL_MS;
     this.nextBossAt = now + BOSS_FIRST_MS;
-    this.nextUpgradeAt = now + UPGRADE_INTERVAL_MS;
     this.nextEventAt = now + EVENT_FIRST_MS;
-
-    this.state.players.forEach((p) => {
-      p.hp = MAX_HP; p.maxHp = MAX_HP; p.shield = MAX_SHIELD; p.maxShield = MAX_SHIELD;
-      p.alive = true; p.kills = 0; p.score = 0; p.isBoss = false; p.invulnUntil = 0;
-      p.abilities.splice(0, p.abilities.length, ...(this.playerPicks.get(p.id) || STARTER_ABILITIES));
-      p.passives.splice(0, p.passives.length);
-      Array.from(p.cooldowns.keys()).forEach((k) => p.cooldowns.delete(k));
-      this.spawnPosition(p);
-      p.vx = 0; p.vy = 0;
-      if (this.botState.has(p.id)) {
-        const bs = this.botState.get(p.id);
-        bs.decisionAt = 0; bs.retargetAt = 0; bs.targetId = null; bs.wanderTarget = null;
-      } else if (p.isBot) {
-        this.botState.set(p.id, { decisionAt: 0, decisionInterval: rand(220, 420), targetId: null, retargetAt: 0, wanderTarget: null, wanderUntil: 0, style: Math.random() < 0.5 ? 'aggressive' : 'cautious' });
-      }
-    });
-
+    this.state.props.forEach((pr) => { pr.alive = true; pr.hp = PROP_HP; });
+    this.state.players.forEach((p) => this.resetPlayer(p));
     this.broadcast('matchStart', { readyInMs: GRACE_MS });
   }
 
   endMatch(winner) {
+    if (this.state.phase !== 'playing') return;
     this.state.phase = 'ended';
     this.state.winnerId = winner ? winner.id : '';
     this.state.winnerName = winner ? winner.name : '';
     const results = [...this.state.players.values()].map((p) => {
       const status = winner && p.id === winner.id ? 'winner' : p.alive ? 'survivor' : 'eliminated';
-      const pts = status === 'winner' ? 100 + p.kills * 20 : status === 'survivor' ? 40 + p.kills * 20 : p.kills * 20;
-      return { id: p.id, name: p.name, status, kills: p.kills, pts, isBot: p.isBot };
+      const pts = (status === 'winner' ? 100 : status === 'survivor' ? 40 : 0) + p.kills * 20;
+      return { id: p.id, name: p.name, hero: p.hero, status, kills: p.kills, pts, isBot: p.isBot };
     }).sort((a, b) => b.pts - a.pts);
     this.broadcast('roundEnd', { results, winnerName: winner ? winner.name : null });
-
     this.restartTimer = setTimeout(() => {
-      // drop bots, refill, and go again — a real multiplayer room just keeps looping
-      [...this.state.players.entries()].forEach(([id, p]) => { if (p.isBot) { this.state.players.delete(id); this.botState.delete(id); this.playerPicks.delete(id); } });
+      [...this.state.players.entries()].forEach(([id, p]) => { if (p.isBot) { this.state.players.delete(id); this.botState.delete(id); this.loadouts.delete(id); } });
       this.state.phase = 'waiting';
       if (this.state.players.size > 0) this.fillWithBotsAndStart();
     }, RESTART_DELAY_MS);
   }
 
-  // ---------------------------------------------------------------- input / casting
-  handleInput(client, msg) {
-    const p = this.state.players.get(client.sessionId);
-    if (!p || !p.alive || this.state.phase !== 'playing') return;
-    const mx = clamp(Number(msg.mx) || 0, -1, 1);
-    const my = clamp(Number(msg.my) || 0, -1, 1);
-    const n = (mx || my) ? normalize(mx, my) : { x: 0, y: 0 };
-    const speed = this.effSpeed(p);
-    p.vx = n.x * speed; p.vy = n.y * speed;
-    if (typeof msg.aimX === 'number') p._aimX = msg.aimX;
-    if (typeof msg.aimY === 'number') p._aimY = msg.aimY;
-  }
-
-  handleCast(client, msg) {
-    const p = this.state.players.get(client.sessionId);
-    if (!p || !p.alive || this.state.phase !== 'playing') return;
-    this.tryCast(p, msg.abilityId, Number(msg.tx) || p.x, Number(msg.ty) || p.y);
-  }
-
-  effSpeed(p) {
-    let mult = 1;
-    if (p._speedBoostUntil > Date.now()) mult *= p._speedBoostMult || 1;
-    if (p.passives.includes('laststand') && p.hp / this.maxHpOf(p) < 0.3) mult *= 1.25;
-    return PLAYER_SPEED * mult;
-  }
-  maxHpOf(p) { return MAX_HP + (p.isBoss ? BOSS_HP_BONUS : 0); }
-
-  tryCast(entity, abilityId, tx, ty) {
-    const isBasic = abilityId === BASIC_ABILITY.id;
-    const a = ABILITIES[abilityId] || BOSS_ABILITIES[abilityId] || (isBasic ? BASIC_ABILITY : null);
-    if (!a) return false;
-    if (BOSS_ABILITIES[abilityId]) {
-      if (!entity.isBoss) return false; // boss-only ability, never part of a loadout
-    } else if (isBasic) {
-      // always available — not part of the chosen/unlocked loadout, no ownership check
-    } else if (!entity.abilities.includes(abilityId)) {
-      return false; // server-authoritative: reject casts for abilities the caster hasn't unlocked
-    }
-    const now = Date.now();
-    if (now < this.state.matchReadyAt) return false;
-    if (now < this.eventNoAbilitiesUntil) return false;
-    if ((entity.cooldowns.get(abilityId) || 0) > now) return false;
-    const cdMult = this.eventCooldownMult * (entity.passives.includes('quickhands') ? 0.85 : 1);
-    entity.cooldowns.set(abilityId, now + a.cooldown * cdMult);
-    this.performCast(entity, abilityId, tx, ty);
-    this.broadcast('cast', { casterId: entity.id, abilityId, x: entity.x, y: entity.y, tx, ty, ts: now });
-    return true;
-  }
-
-  performCast(entity, id, tx, ty) {
-    const now = Date.now();
-    const a = ABILITIES[id] || BOSS_ABILITIES[id] || (id === BASIC_ABILITY.id ? BASIC_ABILITY : null);
-    if (id === 'boss_nova') {
-      this.effects.push({ type: 'meteor', x: entity.x, y: entity.y, caster: entity, createdAt: now, telegraph: a.telegraph, impacted: false, damage: a.damage, radius: a.radius });
-    } else if (id === BASIC_ABILITY.id) {
-      this.effects.push({ type: 'fireball', x: entity.x, y: entity.y, vx: 0, vy: 0, dir: normalize(tx - entity.x, ty - entity.y), speed: a.speed, caster: entity, createdAt: now, maxLife: 1200, damage: a.damage, radius: a.radius, abilityId: id });
-    } else if (id === 'dash' || id === 'teleport') {
-      const dir = normalize(tx - entity.x, ty - entity.y);
-      const dist_ = id === 'dash' ? a.range : a.range;
-      entity.x = clamp(entity.x + dir.x * dist_, 20, this.state.arenaW - 20);
-      entity.y = clamp(entity.y + dir.y * dist_, 20, this.state.arenaH - 20);
-      entity.invulnUntil = Math.max(entity.invulnUntil, now + (id === 'dash' ? 400 : 550));
-    } else if (id === 'shield') {
-      entity.invulnUntil = now + a.duration;
-    } else if (id === 'fireball') {
-      this.effects.push({ type: 'fireball', x: entity.x, y: entity.y, vx: 0, vy: 0, dir: normalize(tx - entity.x, ty - entity.y), speed: a.speed, caster: entity, createdAt: now, maxLife: 1500, damage: a.damage, radius: a.radius, abilityId: id });
-    } else if (id === 'meteor') {
-      this.effects.push({ type: 'meteor', x: tx, y: ty, caster: entity, createdAt: now, telegraph: a.telegraph, impacted: false, damage: a.damage, radius: a.radius });
-    } else if (id === 'lightning') {
-      let best = null, bd = Infinity;
-      this.state.players.forEach((e) => { if (e.alive && e !== entity && !this.isDisconnectedGhost(e)) { const d = dist(entity, e); if (d < bd) { bd = d; best = e; } } });
-      const tx2 = best ? best.x : tx, ty2 = best ? best.y : ty;
-      this.effects.push({ type: 'lightning', x: tx2, y: ty2, caster: entity, createdAt: now, telegraph: a.telegraph, impacted: false, damage: a.damage, radius: a.radius });
-    } else if (id === 'blackhole') {
-      this.effects.push({ type: 'blackhole', x: tx, y: ty, caster: entity, createdAt: now, telegraph: a.telegraph, pull: a.pull, exploded: false, damage: a.damage, radius: a.radius });
-    } else if (id === 'freeze') {
-      this.effects.push({ type: 'freeze', x: tx, y: ty, caster: entity, createdAt: now, telegraph: a.telegraph, active: a.duration, tickInterval: 500, lastTick: -1, damage: a.damage, radius: a.radius, slowMult: a.slowMult });
-    } else if (id === 'firewave' || id === 'tsunami') {
-      const dir = normalize(tx - entity.x, ty - entity.y);
-      this.effects.push({ type: 'wave', originX: entity.x, originY: entity.y, dirX: dir.x, dirY: dir.y, caster: entity, createdAt: now, telegraph: a.telegraph, speed: a.speed, width: a.width, damage: a.damage, hitSet: new Set() });
-    } else if (id === 'mine') {
-      this.mines.push({ x: tx, y: ty, caster: entity, createdAt: now, expiresAt: now + a.lifetime, damage: a.damage, radius: a.radius, triggered: false });
-    }
-  }
-
-  isDisconnectedGhost() { return false; }
-
-  // ---------------------------------------------------------------- damage
-  applyDamage(entity, amount, caster, abilityId) {
-    if (!entity.alive) return;
-    const now = Date.now();
-    if (entity.invulnUntil > now) return;
-    amount *= this.eventDamageMult;
-    amount = Math.max(0, amount);
-
-    entity._lastHitAt = now;
-    const absorbed = Math.min(entity.shield, amount);
-    entity.shield -= absorbed;
-    const toHp = amount - absorbed;
-    if (toHp > 0) entity.hp -= toHp;
-
-    if (caster && caster !== entity) {
-      if (caster.passives.includes('vampiric')) caster.hp = Math.min(this.maxHpOf(caster), caster.hp + amount * 0.12);
-      if (entity.id === this.state.bossId) { if (!this._bossDamagers) this._bossDamagers = new Set(); this._bossDamagers.add(caster.id); }
-    }
-    if (entity.passives.includes('thorns') && caster && caster !== entity && caster.alive) {
-      caster.hp = Math.max(1, caster.hp - amount * 0.15);
-    }
-
-    if (entity.hp <= 0 && entity.alive) {
-      entity.alive = false;
-      entity.hp = 0;
-      if (caster && caster !== entity) {
-        caster.kills += 1;
-        caster.score += 20;
-        if (caster.passives.includes('bloodlust')) { caster._speedBoostUntil = now + 5000; caster._speedBoostMult = 1.15; }
-        this.grantRandomPassive(caster);
-        this.broadcast('killfeed', { killer: caster.name, victim: entity.name, abilityId: abilityId || null });
-      }
-      this.broadcast('death', { victimId: entity.id, killerName: caster ? caster.name : null, abilityId: abilityId || null });
-      if (entity.id === this.state.bossId) this.resolveBossHunt(caster);
-      this.checkRoundEnd();
-    }
-  }
-
-  grantRandomPassive(entity) {
-    const missing = PASSIVE_IDS.filter((id) => !entity.passives.includes(id));
-    if (entity.passives.length >= MAX_PASSIVE_SLOTS || !missing.length) {
-      entity.hp = Math.min(MAX_HP, entity.hp + 12);
-      return;
-    }
-    const pick = missing[Math.floor(Math.random() * missing.length)];
-    entity.passives.push(pick);
-    this.broadcast('passiveAcquired', { playerId: entity.id, playerName: entity.name, passiveId: pick });
-  }
-
-  // ---------------------------------------------------------------- ability upgrade offers
-  offerUpgrades() {
-    this.state.players.forEach((p) => {
-      if (!p.alive || p.abilities.length >= MAX_ABILITY_SLOTS) return;
-      const missing = ABILITY_IDS.filter((id) => !p.abilities.includes(id));
-      if (!missing.length) return;
-      const options = missing.sort(() => Math.random() - 0.5).slice(0, 3);
-      if (p.isBot) {
-        p.abilities.push(options[Math.floor(Math.random() * options.length)]);
-        return;
-      }
-      const client = this.clients.find((c) => c.sessionId === p.id);
-      if (!client) return;
-      client.send('upgradeOffer', { options });
-      const timeout = setTimeout(() => {
-        if (this.pendingUpgrades.has(p.id)) {
-          const opts = this.pendingUpgrades.get(p.id).options;
-          if (p.abilities.length < MAX_ABILITY_SLOTS) p.abilities.push(opts[0]);
-          this.pendingUpgrades.delete(p.id);
-        }
-      }, UPGRADE_OFFER_TIMEOUT_MS);
-      this.pendingUpgrades.set(p.id, { options, timeout });
-    });
-  }
-  handleUpgradeChoice(client, msg) {
-    const pending = this.pendingUpgrades.get(client.sessionId);
-    const p = this.state.players.get(client.sessionId);
-    if (!pending || !p) return;
-    clearTimeout(pending.timeout);
-    this.pendingUpgrades.delete(client.sessionId);
-    const pick = pending.options.includes(msg.id) ? msg.id : pending.options[0];
-    if (p.abilities.length < MAX_ABILITY_SLOTS && !p.abilities.includes(pick)) p.abilities.push(pick);
-  }
-
-  // ---------------------------------------------------------------- boss hunt
-  pickBossCandidate() {
-    const alive = [...this.state.players.values()].filter((p) => p.alive);
-    if (alive.length < 3) return null;
-    let best = null;
-    alive.forEach((p) => { if (!best || p.kills > best.kills || (p.kills === best.kills && p.hp > best.hp)) best = p; });
-    return best;
-  }
-  triggerBossHunt() {
-    const cand = this.pickBossCandidate();
-    if (!cand) { this.nextBossAt = Date.now() + 8000; return; }
-    const now = Date.now();
-    this.state.bossId = cand.id;
-    this.state.bossHuntEndAt = now + BOSS_DURATION_MS;
-    this._bossDamagers = new Set();
-    cand.isBoss = true;
-    cand.hp = Math.min(this.maxHpOf(cand), cand.hp + BOSS_HP_BONUS * 0.6);
-    cand.shield = cand.maxShield;
-    cand.cooldowns.set('boss_nova', 0);
-    this.broadcast('bossHunt', { name: cand.name, id: cand.id });
-  }
-  resolveBossHunt(killer) {
-    const boss = this.state.players.get(this.state.bossId);
-    if (boss) boss.isBoss = false;
-    if (killer && this._bossDamagers) {
-      this._bossDamagers.forEach((id) => { const e = this.state.players.get(id); if (e && e.alive) e.hp = Math.min(this.maxHpOf(e), e.hp + 8); });
-      this.broadcast('bossResolved', { survived: false, name: killer.name });
-    }
-    this.state.bossId = ''; this.state.bossHuntEndAt = 0; this._bossDamagers = null;
-    this.nextBossAt = Date.now() + BOSS_COOLDOWN_MS;
-  }
-  bossHuntSurvived() {
-    const boss = this.state.players.get(this.state.bossId);
-    if (boss) { boss.isBoss = false; boss.hp = MAX_HP; boss.shield = boss.maxShield; this.broadcast('bossResolved', { survived: true, name: boss.name }); }
-    this.state.bossId = ''; this.state.bossHuntEndAt = 0; this._bossDamagers = null;
-    this.nextBossAt = Date.now() + BOSS_COOLDOWN_MS;
-  }
-
-  // ---------------------------------------------------------------- world events
-  triggerWorldEvent() {
-    if (this.state.bossId) { this.nextEventAt = Date.now() + 8000; return; }
-    const id = EVENT_IDS[Math.floor(Math.random() * EVENT_IDS.length)];
-    const now = Date.now();
-    const durations = { double_damage: 8000, chaos: 10000, no_abilities: 4000, meteor_shower: 4500 };
-    const dur = durations[id];
-    this.state.eventId = id; this.state.eventUntil = now + dur;
-    if (id === 'double_damage') this.eventDamageMult = 2;
-    else if (id === 'chaos') this.eventCooldownMult = 0.5;
-    else if (id === 'no_abilities') this.eventNoAbilitiesUntil = now + dur;
-    else if (id === 'meteor_shower') {
-      for (let i = 0; i < 6; i++) {
-        setTimeout(() => {
-          if (this.state.phase !== 'playing') return;
-          this.effects.push({ type: 'meteor', x: rand(80, this.state.arenaW - 80), y: rand(80, this.state.arenaH - 80), caster: null, createdAt: Date.now(), telegraph: 900, impacted: false, damage: 24, radius: 80 });
-        }, i * 550);
-      }
-    }
-    this.broadcast('worldEvent', { id });
-    this.nextEventAt = now + dur + EVENT_COOLDOWN_MS;
-  }
-  endEventIfDone(now) {
-    if (this.state.eventId && now > this.state.eventUntil) {
-      if (this.state.eventId === 'double_damage') this.eventDamageMult = 1;
-      if (this.state.eventId === 'chaos') this.eventCooldownMult = 1;
-      this.state.eventId = ''; this.state.eventUntil = 0;
-    }
-  }
-
-  // ---------------------------------------------------------------- round end
   checkRoundEnd() {
     if (this.state.phase !== 'playing') return;
     const alive = [...this.state.players.values()].filter((p) => p.alive);
     if (alive.length <= 1) this.endMatch(alive[0] || null);
   }
 
+  // ---------------------------------------------------------------- input / casting
+  handleInput(client, msg) {
+    const p = this.state.players.get(client.sessionId);
+    if (!p || !p.alive) return;
+    const mx = clamp(Number(msg.mx) || 0, -1, 1), my = clamp(Number(msg.my) || 0, -1, 1);
+    const l = Math.hypot(mx, my);
+    p._mx = l > 1 ? mx / l : mx; p._my = l > 1 ? my / l : my;
+  }
+  handleCast(client, msg) {
+    const p = this.state.players.get(client.sessionId);
+    if (!p || !p.alive || this.state.phase !== 'playing') return;
+    const tx = Number(msg.tx), ty = Number(msg.ty);
+    this.tryCast(p, String(msg.abilityId), Number.isFinite(tx) ? tx : p.x, Number.isFinite(ty) ? ty : p.y);
+  }
+
+  has(p, s, now = Date.now()) { return (p._st[s] || 0) > now; }
+
+  defOf(id) {
+    if (id === BASIC_ABILITY.id) return BASIC_ABILITY;
+    if (id === BOSS_ABILITY.id) return BOSS_ABILITY;
+    return ABILITIES[id] || LEGENDS[id] || null;
+  }
+
+  tryCast(p, id, tx, ty) {
+    const a = this.defOf(id);
+    if (!a) return false;
+    if (id === BOSS_ABILITY.id) { if (!p.isBoss) return false; }
+    else if (LEGENDS[id]) { if (p.legend !== id) return false; }
+    else if (ABILITIES[id]) { if (!p.abilities.includes(id)) return false; }
+    const now = Date.now();
+    if (now < this.state.matchReadyAt) return false;
+    if (this.has(p, 'stun', now) || this.has(p, 'airborne', now)) return false;
+    if ((id === 'dash') && this.has(p, 'root', now)) return false;
+    if ((p.cooldowns.get(id) || 0) > now) return false;
+    const cdMult = this.eventCooldownMult * (p.passives.includes('quickhands') ? 0.85 : 1);
+    p.cooldowns.set(id, now + a.cooldown * cdMult);
+    // clamp targeted abilities to their range
+    if (a.range) {
+      const d = Math.hypot(tx - p.x, ty - p.y);
+      if (d > a.range) { const n = normalize(tx - p.x, ty - p.y); tx = p.x + n.x * a.range; ty = p.y + n.y * a.range; }
+    }
+    const res = this.performCast(p, id, a, tx, ty, now) || {};
+    this.broadcast('cast', { casterId: p.id, abilityId: id, x: p.x, y: p.y, tx: res.tx ?? tx, ty: res.ty ?? ty, ts: now });
+    return true;
+  }
+
+  performCast(p, id, a, tx, ty, now) {
+    const dir = normalize(tx - p.x, ty - p.y);
+    const proj = (extra) => this.projectiles.push({ x: p.x, y: p.y - 10, dir, travelled: 0, caster: p, abilityId: id, ...extra });
+
+    switch (id) {
+      case 'strike':      proj({ speed: a.speed, damage: a.damage, radius: a.radius, range: a.range }); break;
+      case 'fireball':
+      case 'ice_shard':
+      case 'hunter_mark': proj({ speed: a.speed, damage: a.damage, radius: a.radius, range: a.range, applies: a.applies }); break;
+      case 'fate_arrow':  proj({ speed: a.speed, damage: a.damage, radius: a.radius, range: a.range, applies: a.applies, pierce: true, hit: new Set(), delayUntil: now + a.telegraph }); break;
+      case 'lightning':   this.effects.push({ type: 'strike', x: tx, y: ty, caster: p, at: now + a.telegraph, damage: a.damage, radius: a.radius, applies: 'shock', impact: 'lightning' }); break;
+      case 'earth_prison':this.effects.push({ type: 'strike', x: tx, y: ty, caster: p, at: now + a.telegraph, damage: a.damage, radius: a.radius, applies: 'root', rootMs: a.rootMs, impact: 'earth' }); break;
+      case 'ice_age':     this.effects.push({ type: 'strike', x: p.x, y: p.y, caster: p, at: now + a.telegraph, damage: a.damage, radius: a.radius, applies: 'chill', impact: 'ice' }); return { tx: p.x, ty: p.y };
+      case 'boss_nova':   this.effects.push({ type: 'strike', x: p.x, y: p.y, caster: p, at: now + a.telegraph, damage: a.damage, radius: a.radius, impact: 'nova' }); return { tx: p.x, ty: p.y };
+      case 'meteor_storm':
+        for (let i = 0; i < a.count; i++) {
+          const ang = Math.random() * Math.PI * 2, r = i === 0 ? 0 : rand(40, a.spread);
+          this.effects.push({ type: 'strike', x: tx + Math.cos(ang) * r, y: ty + Math.sin(ang) * r, caster: p, at: now + a.telegraph + i * 280, damage: a.damage, radius: a.radius, applies: 'burn', impact: 'meteor', announce: true });
+        }
+        break;
+      case 'water_splash': {
+        const cx = p.x + dir.x * a.reach, cy = p.y + dir.y * a.reach;
+        this.areaHit(cx, cy, a.radius, p, (e) => {
+          if (!this.dealDamage(e, a.damage, p, id)) return;
+          this.knock(e, normalize(e.x - p.x, e.y - p.y), a.knock);
+          this.applyStatus(e, 'wet', p);
+        });
+        this.broadcast('impact', { type: 'splash', x: cx, y: cy, radius: a.radius });
+        return { tx: cx, ty: cy };
+      }
+      case 'gust':
+      case 'tsunami':
+        this.effects.push({ type: 'wave', ox: p.x, oy: p.y, dir, caster: p, at: now + (a.telegraph || 0), speed: a.speed, width: a.width, length: a.length || 2600, damage: a.damage, knock: a.knock, applies: a.applies, hit: new Set(), abilityId: id });
+        break;
+      case 'dash': {
+        const steps = 12;
+        for (let i = 0; i < steps; i++) {
+          const nx = p.x + dir.x * a.range / steps, ny = p.y + dir.y * a.range / steps;
+          if (pointBlocked(nx, ny, PLAYER_RADIUS)) break;
+          p.x = nx; p.y = ny;
+        }
+        resolveCircle(p, PLAYER_RADIUS, this.liveProps());
+        p.invulnUntil = Math.max(p.invulnUntil, now + 350);
+        p._empowerUntil = now + 2500;
+        return { tx: p.x, ty: p.y };
+      }
+      case 'shield': p.invulnUntil = Math.max(p.invulnUntil, now + a.duration); return { tx: p.x, ty: p.y };
+      case 'trap': {
+        let x = tx, y = ty;
+        if (pointBlocked(x, y, 10)) { x = p.x; y = p.y; }
+        this.traps.push({ x, y, caster: p, expiresAt: now + a.lifetime, damage: a.damage, radius: a.radius });
+        const c = this.clients.find((cl) => cl.sessionId === p.id);
+        if (c) c.send('trapPlaced', { x, y, expiresAt: now + a.lifetime });
+        return { tx: x, ty: y };
+      }
+      case 'heal_spring':
+        p._healUntil = now + a.duration; p._healRate = a.heal / (a.duration / 1000);
+        ['burn', 'chill', 'wet', 'root', 'mark'].forEach((s) => { p._st[s] = 0; });
+        return { tx: p.x, ty: p.y };
+      case 'black_hole':
+        this.effects.push({ type: 'blackhole', x: tx, y: ty, caster: p, start: now, at: now + a.telegraph, pullRadius: a.pullRadius, damage: a.damage, radius: a.radius });
+        break;
+      case 'thunderstorm':
+        this.effects.push({ type: 'storm', caster: p, at: now + a.telegraph, damage: a.damage, radius: a.radius });
+        return { tx: p.x, ty: p.y };
+      case 'dragon_breath':
+        this.effects.push({ type: 'breath', caster: p, dir, at: now, ticksLeft: a.ticks, tickMs: a.tickMs, damage: a.damage, radius: a.radius, arc: a.arc });
+        break;
+      case 'shadow_strike': {
+        const targets = [...this.state.players.values()]
+          .filter((e) => e !== p && e.alive && dist(e, p) < a.radius)
+          .sort((m, n) => dist(m, p) - dist(n, p)).slice(0, a.targets);
+        p.invulnUntil = Math.max(p.invulnUntil, now + targets.length * a.hopMs + 350);
+        targets.forEach((t, i) => this.effects.push({ type: 'hop', caster: p, target: t, at: now + i * a.hopMs, damage: a.damage }));
+        return { tx: p.x, ty: p.y };
+      }
+      case 'kings_fortress':
+        p.invulnUntil = Math.max(p.invulnUntil, now + a.duration);
+        p.hp = Math.min(this.maxHpOf(p), p.hp + a.heal);
+        p._speedUntil = now + a.duration; p._speedMult = a.speedMult;
+        ['burn', 'chill', 'wet', 'root', 'stun', 'mark', 'shock'].forEach((s) => { p._st[s] = 0; });
+        return { tx: p.x, ty: p.y };
+      default: break;
+    }
+    return null;
+  }
+
+  areaHit(x, y, r, caster, fn) {
+    this.state.players.forEach((e) => { if (e.alive && e !== caster && Math.hypot(e.x - x, e.y - y) < r + PLAYER_RADIUS) fn(e); });
+    this.liveProps().forEach((pr) => { if (Math.hypot(pr.x - x, pr.y - 16 - y) < r + 16) this.damageProp(pr, 30); });
+  }
+
+  knock(e, dir, force) {
+    if (e.invulnUntil > Date.now()) return;
+    e._kbx = dir.x * force * 4; e._kby = dir.y * force * 4;
+  }
+
+  maxHpOf(p) { return MAX_HP + (p.isBoss ? BOSS_HP_BONUS : 0); }
+
+  // ---------------------------------------------------------------- damage, statuses, combos
+  // returns true if the target is still alive afterwards
+  dealDamage(t, amount, caster, source, opts = {}) {
+    if (!t.alive) return false;
+    const now = Date.now();
+    if (t.invulnUntil > now) return true;
+    let dmg = amount * this.eventDamageMult;
+    const fromAbility = source !== 'burn' && source !== 'zone' && source !== 'thorns';
+    if (caster && caster !== t && fromAbility) {
+      if (caster.passives.includes('crit') && Math.random() < 0.2) { dmg *= 1.6; this.broadcast('crit', { x: t.x, y: t.y }); }
+      if (caster._empowerUntil > now && source !== 'combo') { dmg *= 1.4; caster._empowerUntil = 0; }
+      if (this.has(t, 'mark', now) && source !== 'combo' && source !== 'hunter_mark' && source !== 'fate_arrow') {
+        t._st.mark = 0; dmg += 12; this.broadcast('combo', { id: 'mark', x: t.x, y: t.y });
+      }
+    }
+    if (t.passives.includes('stoneskin')) dmg *= 0.85;
+    if (t.passives.includes('laststand') && t.hp / this.maxHpOf(t) < 0.3) dmg *= 0.8;
+    dmg = Math.max(0, dmg);
+
+    t._lastHitAt = now;
+    const absorbed = Math.min(t.shield, dmg);
+    t.shield -= absorbed;
+    t.hp -= (dmg - absorbed);
+
+    if (caster && caster !== t && caster.alive) {
+      if (caster.passives.includes('vampiric') && fromAbility) caster.hp = Math.min(this.maxHpOf(caster), caster.hp + dmg * 0.12);
+      if (t.passives.includes('thorns') && fromAbility) caster.hp = Math.max(1, caster.hp - dmg * 0.15);
+      if (caster.passives.includes('frosttouch') && fromAbility && source !== 'combo' && Math.random() < 0.25 && t.hp > 0) this.applyStatus(t, 'chill', caster);
+      if (t.id === this.state.bossId) { this._bossDamagers = this._bossDamagers || new Set(); this._bossDamagers.add(caster.id); }
+    }
+
+    if (t.hp <= 0 && t.alive) { this.kill(t, caster); return false; }
+    return true;
+  }
+
+  kill(t, caster) {
+    const now = Date.now();
+    t.alive = false; t.hp = 0; t.vx = 0; t.vy = 0; t.fx = '';
+    if (caster && caster !== t) {
+      caster.kills += 1; caster.score += 20;
+      if (caster.passives.includes('bloodlust')) { caster._speedUntil = now + 5000; caster._speedMult = 1.2; caster.hp = Math.min(this.maxHpOf(caster), caster.hp + 10); }
+      // steal one of the victim's passives
+      const stealable = t.passives.filter((id) => !caster.passives.includes(id));
+      if (stealable.length) {
+        const stolen = pick(stealable);
+        caster.passives.push(stolen);
+        this.broadcast('steal', { playerId: caster.id, playerName: caster.name, fromName: t.name, passiveId: stolen });
+      } else {
+        caster.hp = Math.min(this.maxHpOf(caster), caster.hp + 20);
+      }
+      this.broadcast('killfeed', { killer: caster.name, victim: t.name });
+    }
+    this.broadcast('death', { victimId: t.id, killerName: caster ? caster.name : null, x: t.x, y: t.y });
+    if (t.id === this.state.bossId) this.resolveBossHunt(caster);
+    this.checkRoundEnd();
+  }
+
+  applyStatus(t, s, caster, ms) {
+    if (!t.alive || !s) return;
+    const now = Date.now();
+    if (t.invulnUntil > now) return;
+    const has = (k) => this.has(t, k, now);
+    const combo = (id, dmg, after) => {
+      this.broadcast('combo', { id, x: t.x, y: t.y });
+      if (dmg && !this.dealDamage(t, dmg, caster, 'combo')) return;
+      if (after) after();
+    };
+    if (s === 'shock' && has('wet')) { t._st.wet = 0; return combo('electro', 18, () => { t._st.stun = now + 1000; }); }
+    if (s === 'wet' && has('shock')) { t._st.shock = 0; return combo('electro', 18, () => { t._st.stun = now + 1000; }); }
+    if ((s === 'chill' && has('wet')) || (s === 'wet' && has('chill'))) { t._st.wet = 0; t._st.chill = 0; return combo('freeze', 6, () => { t._st.stun = now + 1400; }); }
+    if (s === 'chill' && has('chill')) { t._st.chill = 0; return combo('freeze', 6, () => { t._st.stun = now + 1100; }); }
+    if ((s === 'chill' && has('burn')) || (s === 'burn' && has('chill'))) { t._st.burn = 0; t._st.chill = 0; return combo('shatter', 20); }
+    if ((s === 'burn' && has('wet')) || (s === 'wet' && has('burn'))) { t._st.burn = 0; t._st.wet = 0; return combo('steam', 10); }
+    if ((s === 'airborne' && has('burn')) || (s === 'burn' && has('airborne'))) {
+      return combo('firestorm', 12, () => {
+        this.state.players.forEach((e) => { if (e !== t && e !== caster && e.alive && dist(e, t) < 160) { e._st.burn = now + STATUS_MS.burn; e._burnBy = caster; } });
+      });
+    }
+    t._st[s] = now + (ms || STATUS_MS[s]);
+    if (s === 'burn') t._burnBy = caster;
+  }
+
+  damageProp(pr, amount) {
+    if (!pr.alive) return;
+    pr.hp -= amount;
+    if (pr.hp <= 0) {
+      pr.alive = false;
+      this.pickups.push({ x: pr.x, y: pr.y - 14 });
+      this.syncPickups();
+      this.broadcast('propBreak', { id: pr.id, x: pr.x, y: pr.y, kind: pr.kind });
+    }
+  }
+  syncPickups() { this.state.pickups = this.pickups.map((k) => `${Math.round(k.x)}:${Math.round(k.y)}`).join(';'); }
+
+  // ---------------------------------------------------------------- boss hunt / events
+  triggerBossHunt() {
+    const alive = [...this.state.players.values()].filter((p) => p.alive);
+    if (alive.length < 3) { this.nextBossAt = Date.now() + 8000; return; }
+    const cand = alive.reduce((b, p) => (!b || p.kills > b.kills || (p.kills === b.kills && p.hp > b.hp) ? p : b), null);
+    const now = Date.now();
+    this.state.bossId = cand.id; this.state.bossHuntEndAt = now + BOSS_DURATION_MS;
+    this._bossDamagers = new Set();
+    cand.isBoss = true;
+    cand.hp = Math.min(this.maxHpOf(cand), cand.hp + BOSS_HP_BONUS * 0.6);
+    cand.shield = cand.maxShield;
+    cand.cooldowns.set(BOSS_ABILITY.id, 0);
+    this.broadcast('bossHunt', { name: cand.name, id: cand.id });
+  }
+  resolveBossHunt(killer) {
+    const boss = this.state.players.get(this.state.bossId);
+    if (boss) boss.isBoss = false;
+    if (this._bossDamagers) this._bossDamagers.forEach((id) => { const e = this.state.players.get(id); if (e && e.alive) e.hp = Math.min(this.maxHpOf(e), e.hp + 10); });
+    this.broadcast('bossResolved', { survived: false, name: killer ? killer.name : '' });
+    this.state.bossId = ''; this.state.bossHuntEndAt = 0; this._bossDamagers = null;
+    this.nextBossAt = Date.now() + BOSS_COOLDOWN_MS;
+  }
+  bossHuntSurvived() {
+    const boss = this.state.players.get(this.state.bossId);
+    if (boss) { boss.isBoss = false; boss.hp = Math.min(MAX_HP, boss.hp); this.broadcast('bossResolved', { survived: true, name: boss.name }); }
+    this.state.bossId = ''; this.state.bossHuntEndAt = 0; this._bossDamagers = null;
+    this.nextBossAt = Date.now() + BOSS_COOLDOWN_MS;
+  }
+  triggerWorldEvent() {
+    const id = pick(EVENT_IDS);
+    const now = Date.now();
+    const dur = { double_damage: 8000, chaos: 10000, meteor_shower: 5000 }[id];
+    this.state.eventId = id; this.state.eventUntil = now + dur;
+    if (id === 'double_damage') this.eventDamageMult = 2;
+    if (id === 'chaos') this.eventCooldownMult = 0.5;
+    if (id === 'meteor_shower') {
+      for (let i = 0; i < 8; i++) {
+        const spot = randomOpenPoint(Math.random, MAP_W / 2, MAP_H / 2, Math.min(this.state.safeRadius, 700));
+        this.effects.push({ type: 'strike', x: spot.x, y: spot.y, caster: null, at: now + 900 + i * 450, damage: 20, radius: 80, applies: 'burn', impact: 'meteor', announce: true });
+      }
+    }
+    this.broadcast('worldEvent', { id });
+    this.nextEventAt = now + dur + EVENT_COOLDOWN_MS;
+  }
+
   // ---------------------------------------------------------------- bots
-  updateBot(p, bs, dtSec, now) {
-    if (!p.alive) return;
-    if (p.isBoss) {
-      let target = null, bd = Infinity;
-      this.state.players.forEach((e) => { if (e.alive && e !== p) { const d = dist(p, e); if (d < bd) { bd = d; target = e; } } });
-      if (target) {
-        const dir = normalize(target.x - p.x, target.y - p.y);
-        const sp = this.effSpeed(p);
-        p.vx = dir.x * sp * 0.5; p.vy = dir.y * sp * 0.5; // boss holds ground more than it chases
-        if (now - bs.decisionAt > bs.decisionInterval) {
-          bs.decisionAt = now;
-          if (bd < 170 && (p.cooldowns.get('boss_nova') || 0) <= now) {
-            this.tryCast(p, 'boss_nova', p.x, p.y);
-          } else if (Math.random() < 0.14) {
-            const opts = p.abilities.filter((id) => (p.cooldowns.get(id) || 0) <= now);
-            if (opts.length) this.tryCast(p, opts[Math.floor(Math.random() * opts.length)], target.x, target.y);
-          }
-        }
-      }
-      return;
+  steer(p, dir) {
+    // probe ahead; if blocked, rotate to find an open heading around the obstacle
+    const probe = 46;
+    const angles = [0, 0.7, -0.7, 1.3, -1.3, 2.0, -2.0];
+    const base = Math.atan2(dir.y, dir.x);
+    for (const da of angles) {
+      const a = base + da;
+      if (!pointBlocked(p.x + Math.cos(a) * probe, p.y + Math.sin(a) * probe, PLAYER_RADIUS)) return { x: Math.cos(a), y: Math.sin(a) };
     }
-    if (this.state.bossId && p.id !== this.state.bossId) {
-      const boss = this.state.players.get(this.state.bossId);
-      if (boss && boss.alive) {
-        const dir = normalize(boss.x - p.x, boss.y - p.y);
-        const sp = this.effSpeed(p);
-        p.vx = dir.x * sp; p.vy = dir.y * sp;
-        if (now - bs.decisionAt > bs.decisionInterval) {
-          bs.decisionAt = now;
-          if (Math.random() < 0.16) {
-            const bd = dist(p, boss);
-            const opts = p.abilities.filter((id) => (p.cooldowns.get(id) || 0) <= now && bd < 420);
-            if (opts.length) this.tryCast(p, opts[Math.floor(Math.random() * opts.length)], boss.x, boss.y);
-          }
-        }
-        return;
-      }
-    }
+    return { x: -dir.x, y: -dir.y };
+  }
 
-    const inRange = [...this.state.players.values()].filter((e) => e.alive && e !== p && dist(p, e) < 520);
-    const stillValid = bs.targetId && inRange.some((e) => e.id === bs.targetId);
-    if (!stillValid || !bs.retargetAt || now > bs.retargetAt) {
-      bs.targetId = inRange.length ? inRange[Math.floor(Math.random() * inRange.length)].id : null;
-      bs.retargetAt = now + rand(2500, 4500);
-    }
-    const target = bs.targetId ? inRange.find((e) => e.id === bs.targetId) : null;
-    const bd = target ? dist(p, target) : Infinity;
+  updateBot(p, bs, now) {
+    if (!p.alive || !bs) return;
+    const center = { x: MAP_W / 2, y: MAP_H / 2 };
+    const visible = (e) => e.alive && e !== p && (!e.hidden || dist(p, e) < 150);
+    let move = { x: 0, y: 0 }, speedFrac = 1;
 
-    if (target) {
-      const dir = normalize(target.x - p.x, target.y - p.y);
-      const sp = this.effSpeed(p);
-      if (bs.style === 'aggressive' || bd > 220) { p.vx = dir.x * sp; p.vy = dir.y * sp; }
-      else { p.vx = -dir.x * sp * 0.6; p.vy = -dir.y * sp * 0.6; }
-
-      if (now - bs.decisionAt > bs.decisionInterval) {
-        bs.decisionAt = now;
-        if (bd < 480 && (p.cooldowns.get(BASIC_ABILITY.id) || 0) <= now && Math.random() < 0.45) {
-          this.tryCast(p, BASIC_ABILITY.id, target.x, target.y);
-        }
-        if (Math.random() < 0.14) {
-          const options = p.abilities.filter((id) => {
-            if ((p.cooldowns.get(id) || 0) > now) return false;
-            if (id === 'shield') return p.hp < 40;
-            if (id === 'freeze' || id === 'blackhole' || id === 'meteor' || id === 'lightning' || id === 'fireball' || id === 'mine') return bd < 460;
-            return true;
-          });
-          if (options.length) {
-            const pick = options[Math.floor(Math.random() * options.length)];
-            let tx = target.x, ty = target.y;
-            if (pick === 'shield') { tx = p.x; ty = p.y; }
-            this.tryCast(p, pick, tx, ty);
-          }
-        }
-      }
+    if (dist(p, center) > this.state.safeRadius * 0.82) {
+      move = normalize(center.x - p.x, center.y - p.y);
     } else {
-      if (!bs.wanderTarget || now > bs.wanderUntil || dist(p, bs.wanderTarget) < 20) {
-        // stay biased toward the (possibly shrinking) safe zone instead of wandering the
-        // full map at random — otherwise bots walk themselves into zone damage constantly
-        // and matches end from attrition instead of combat.
-        const cx = this.state.arenaW / 2, cy = this.state.arenaH / 2;
-        const ang = rand(0, Math.PI * 2);
-        const rad = this.state.safeRadius * rand(0, 0.75);
-        bs.wanderTarget = {
-          x: clamp(cx + Math.cos(ang) * rad, 80, this.state.arenaW - 80),
-          y: clamp(cy + Math.sin(ang) * rad, 80, this.state.arenaH - 80),
-        };
-        bs.wanderUntil = now + rand(1500, 3000);
+      let target = null;
+      if (this.state.bossId && this.state.bossId !== p.id) target = this.state.players.get(this.state.bossId);
+      if (!target || !target.alive) {
+        const inRange = [...this.state.players.values()].filter((e) => visible(e) && dist(p, e) < 560);
+        if (!bs.targetId || now > bs.retargetAt || !inRange.some((e) => e.id === bs.targetId)) {
+          const t = inRange.sort((a, b) => dist(p, a) - dist(p, b))[Math.random() < 0.7 ? 0 : Math.floor(Math.random() * inRange.length)];
+          bs.targetId = t ? t.id : null; bs.retargetAt = now + rand(2500, 4500);
+        }
+        target = bs.targetId ? this.state.players.get(bs.targetId) : null;
       }
-      const wd = normalize(bs.wanderTarget.x - p.x, bs.wanderTarget.y - p.y);
-      const sp = this.effSpeed(p);
-      p.vx = wd.x * sp * 0.55; p.vy = wd.y * sp * 0.55;
+      if (target && target.alive) {
+        const d = dist(p, target);
+        const to = normalize(target.x - p.x, target.y - p.y);
+        const ideal = bs.style === 'aggressive' ? 170 : 300;
+        if (d > ideal + 60) move = to;
+        else if (d < ideal - 60) move = { x: -to.x, y: -to.y };
+        else { move = { x: -to.y * bs.strafe, y: to.x * bs.strafe }; speedFrac = 0.7; if (Math.random() < 0.01) bs.strafe *= -1; }
+
+        if (now > bs.decisionAt) {
+          bs.decisionAt = now + rand(420, 760);
+          const ready = (id) => (p.cooldowns.get(id) || 0) <= now;
+          // lead the shot a bit
+          const lx = target.x + target.vx * 0.25, ly = target.y + target.vy * 0.25;
+          if (p.isBoss && d < 170 && ready(BOSS_ABILITY.id)) this.tryCast(p, BOSS_ABILITY.id, p.x, p.y);
+          else if (d < 420 && ready(p.legend) && Math.random() < 0.25) this.tryCast(p, p.legend, lx, ly);
+          else {
+            const opts = p.abilities.filter((id) => {
+              if (!ready(id)) return false;
+              if (id === 'shield') return p.hp < 45;
+              if (id === 'heal_spring') return p.hp < 60;
+              if (id === 'dash') return d > 380 || p.hp < 35;
+              if (id === 'water_splash') return d < 170;
+              return d < 560;
+            });
+            if (opts.length && Math.random() < 0.35) {
+              const id = pick(opts);
+              this.tryCast(p, id, id === 'dash' && p.hp < 35 ? p.x - to.x * 200 : lx, id === 'dash' && p.hp < 35 ? p.y - to.y * 200 : ly);
+            } else if (d < 600 && ready(BASIC_ABILITY.id)) this.tryCast(p, BASIC_ABILITY.id, lx, ly);
+          }
+        }
+      } else {
+        if (!bs.wander || now > bs.wanderUntil || dist(p, bs.wander) < 30) {
+          bs.wander = randomOpenPoint(Math.random, center.x, center.y, Math.min(this.state.safeRadius * 0.7, 560));
+          bs.wanderUntil = now + rand(2000, 3500);
+        }
+        move = normalize(bs.wander.x - p.x, bs.wander.y - p.y); speedFrac = 0.6;
+      }
     }
+    // grab nearby heal pickups when hurt
+    if (p.hp < 70) { const k = this.pickups.find((q) => dist(p, q) < 260); if (k) move = normalize(k.x - p.x, k.y - p.y); }
+    if (move.x || move.y) move = this.steer(p, move);
+    p._mx = move.x * speedFrac; p._my = move.y * speedFrac;
   }
 
   // ---------------------------------------------------------------- main tick
+  effSpeed(p, now) {
+    if (this.has(p, 'stun', now) || this.has(p, 'root', now) || this.has(p, 'airborne', now)) return 0;
+    let m = 1;
+    if (p.passives.includes('swift')) m *= 1.12;
+    if (p._speedUntil > now) m *= p._speedMult;
+    if (p.passives.includes('laststand') && p.hp / this.maxHpOf(p) < 0.3) m *= 1.25;
+    if (this.has(p, 'chill', now)) m *= CHILL_SLOW;
+    else if (this.has(p, 'wet', now)) m *= WET_SLOW;
+    if (p.inWater) m *= 0.7;
+    return PLAYER_SPEED * m;
+  }
+
   update(dtMs) {
+    if (this.state.phase !== 'playing') return;
     const now = Date.now();
     const dt = dtMs / 1000;
-    if (this.state.phase !== 'playing') return;
+    const props = this.liveProps();
 
     this.state.players.forEach((p) => {
       if (!p.alive) return;
-      if (p.isBot) this.updateBot(p, this.botState.get(p.id), dt, now);
-      p.x = clamp(p.x + p.vx * dt, 20, this.state.arenaW - 20);
-      p.y = clamp(p.y + p.vy * dt, 20, this.state.arenaH - 20);
-      if (p.shield < p.maxShield && now - (p._lastHitAt || 0) > SHIELD_REGEN_DELAY) {
-        p.shield = Math.min(p.maxShield, p.shield + SHIELD_REGEN_RATE * dt);
+      if (p.isBot) this.updateBot(p, this.botState.get(p.id), now);
+      const sp = now < this.state.matchReadyAt ? 0 : this.effSpeed(p, now);
+      p.vx = p._mx * sp; p.vy = p._my * sp;
+      p.x += (p.vx + p._kbx) * dt; p.y += (p.vy + p._kby) * dt;
+      p._kbx *= 0.72; p._kby *= 0.72;
+      if (Math.abs(p._kbx) < 5) p._kbx = 0;
+      if (Math.abs(p._kby) < 5) p._kby = 0;
+      resolveCircle(p, PLAYER_RADIUS, props);
+
+      p.inWater = inWater(p.x, p.y);
+      if (p.inWater && !this.has(p, 'wet', now)) this.applyStatus(p, 'wet', null);
+      if (!p.alive) return;
+      p.hidden = inBush(p.x, p.y);
+
+      // heal over time / regen / shield
+      if (p._healUntil > now) p.hp = Math.min(this.maxHpOf(p), p.hp + p._healRate * dt);
+      if (p.passives.includes('regen') && now - p._lastHitAt > 3000) p.hp = Math.min(this.maxHpOf(p), p.hp + 3 * dt);
+      if (p.shield < p.maxShield && now - p._lastHitAt > SHIELD_REGEN_DELAY) p.shield = Math.min(p.maxShield, p.shield + SHIELD_REGEN_RATE * dt);
+      if (this.has(p, 'burn', now) && now - (p._lastBurnTick || 0) > 500) {
+        p._lastBurnTick = now;
+        if (!this.dealDamage(p, BURN_DPS / 2, p._burnBy, 'burn')) return;
+      }
+
+      // pickups
+      const k = this.pickups.findIndex((q) => dist(p, q) < 34);
+      if (k >= 0 && p.hp < this.maxHpOf(p)) {
+        const q = this.pickups.splice(k, 1)[0]; this.syncPickups();
+        p.hp = Math.min(this.maxHpOf(p), p.hp + PICKUP_HEAL);
+        this.broadcast('impact', { type: 'heal', x: q.x, y: q.y });
       }
     });
 
+    this.processProjectiles(now, dt);
     this.processEffects(now, dt);
-    this.processMines(now);
+    this.processTraps(now);
 
-    // arena shrink
-    const aliveNow = [...this.state.players.values()].filter((p) => p.alive);
-    if (aliveNow.length === 2 && !this.finalDuelAt) {
-      this.finalDuelAt = now;
-      this.broadcast('finalDuel', { a: aliveNow[0].name, b: aliveNow[1].name });
-    }
-    const elapsedFrac = clamp(1 - this.state.remaining / ROUND_TIME, 0, 1);
-    let targetFrac = SAFE_START_FRAC + (SAFE_END_FRAC - SAFE_START_FRAC) * elapsedFrac;
-    if (this.finalDuelAt) targetFrac = Math.min(targetFrac, SAFE_END_FRAC * 0.7);
-    const targetRadius = Math.min(this.state.arenaW, this.state.arenaH) / 2 * targetFrac;
-    this.state.safeRadius += (targetRadius - this.state.safeRadius) * Math.min(1, dt * (this.finalDuelAt ? 1.1 : 0.6));
-    const center = { x: this.state.arenaW / 2, y: this.state.arenaH / 2 };
+    // status string for clients
     this.state.players.forEach((p) => {
       if (!p.alive) return;
-      if (dist(p, center) > this.state.safeRadius && now - (p._lastSafeTick || 0) > SAFE_TICK_MS) {
-        p._lastSafeTick = now;
-        this.applyDamage(p, SAFE_TICK_DMG, null);
+      const list = [];
+      for (const s of ['burn', 'chill', 'wet', 'shock', 'root', 'stun', 'mark', 'airborne']) if (this.has(p, s, now)) list.push(s);
+      const fx = list.join(',');
+      if (fx !== p.fx) p.fx = fx;
+    });
+
+    // shrinking zone
+    const alive = [...this.state.players.values()].filter((p) => p.alive);
+    if (alive.length === 2 && !this.finalDuelAt) { this.finalDuelAt = now; this.broadcast('finalDuel', { a: alive[0].name, b: alive[1].name }); }
+    const startR = Math.hypot(MAP_W, MAP_H) / 2;
+    const frac = clamp(1 - this.state.remaining / ROUND_TIME, 0, 1);
+    let targetR = startR + (SAFE_END_RADIUS - startR) * Math.min(1, frac * 1.15);
+    if (this.finalDuelAt) targetR = Math.max(SAFE_END_RADIUS, Math.min(targetR, this.state.safeRadius - 60 * dt * 20));
+    this.state.safeRadius += (targetR - this.state.safeRadius) * Math.min(1, dt * 0.8);
+    const center = { x: MAP_W / 2, y: MAP_H / 2 };
+    this.state.players.forEach((p) => {
+      if (p.alive && dist(p, center) > this.state.safeRadius && now - (p._lastSafeTick || 0) > SAFE_TICK_MS) {
+        p._lastSafeTick = now; this.dealDamage(p, SAFE_TICK_DMG, null, 'zone');
       }
     });
 
-    // boss hunt / events
     if (!this.state.bossId && now >= this.nextBossAt) this.triggerBossHunt();
     else if (this.state.bossId && now >= this.state.bossHuntEndAt) this.bossHuntSurvived();
     if (!this.state.eventId && !this.state.bossId && now >= this.nextEventAt) this.triggerWorldEvent();
-    this.endEventIfDone(now);
-
-    // orb
-    if (this.state.orbActive) {
-      this.state.players.forEach((p) => {
-        if (!this.state.orbActive || !p.alive) return;
-        if (dist(p, { x: this.state.orbX, y: this.state.orbY }) < 36) {
-          this.grantOrbAbilities(p);
-          this.state.orbActive = false;
-          this.nextOrbAt = now + ORB_INTERVAL_MS;
-        }
-      });
-      if (this.state.orbActive && now - this._orbCreatedAt > ORB_LIFETIME_MS) { this.state.orbActive = false; this.nextOrbAt = now + ORB_INTERVAL_MS; }
-    } else if (now >= this.nextOrbAt) {
-      this.state.orbX = rand(120, this.state.arenaW - 120);
-      this.state.orbY = rand(120, this.state.arenaH - 120);
-      this.state.orbActive = true;
-      this._orbCreatedAt = now;
+    if (this.state.eventId && now > this.state.eventUntil) {
+      this.eventDamageMult = 1; this.eventCooldownMult = 1; this.state.eventId = ''; this.state.eventUntil = 0;
     }
 
-    // ability upgrade offers
-    if (now >= this.nextUpgradeAt) { this.offerUpgrades(); this.nextUpgradeAt = now + UPGRADE_INTERVAL_MS; }
-
     this.state.remaining = Math.max(0, this.state.remaining - dt);
-    if (this.state.remaining <= 0) { this.checkTimeoutEnd(); }
+    if (this.state.remaining <= 0 && this.state.phase === 'playing') {
+      const al = [...this.state.players.values()].filter((p) => p.alive).sort((a, b) => b.hp - a.hp);
+      this.endMatch(al[0] || null);
+    }
   }
 
-  grantOrbAbilities(p) {
-    const missing = ABILITY_IDS.filter((id) => !p.abilities.includes(id));
-    const room = MAX_ABILITY_SLOTS - p.abilities.length;
-    if (room <= 0 || !missing.length) { p.hp = Math.min(this.maxHpOf(p), p.hp + 15); return; }
-    const grant = missing.sort(() => Math.random() - 0.5).slice(0, Math.min(1, room));
-    grant.forEach((id) => { p.abilities.push(id); p.cooldowns.set(id, 0); });
-  }
-
-  checkTimeoutEnd() {
-    if (this.state.phase !== 'playing') return;
-    const alive = [...this.state.players.values()].filter((p) => p.alive);
-    const winner = alive.length === 1 ? alive[0] : null;
-    this.endMatch(winner);
-  }
-
-  processMines(now) {
-    this.mines = this.mines.filter((m) => {
-      if (now > m.expiresAt) return false;
-      if (!m.triggered) {
-        this.state.players.forEach((e) => {
-          if (m.triggered || !e.alive || e === m.caster) return;
-          if (dist(e, m) < m.radius) { m.triggered = true; this.applyDamage(e, m.damage, m.caster, 'mine'); this.broadcast('impact', { type: 'mine', x: m.x, y: m.y }); }
-        });
+  processProjectiles(now, dt) {
+    const props = this.liveProps();
+    this.projectiles = this.projectiles.filter((pr) => {
+      if (pr.delayUntil && now < pr.delayUntil) { pr.x = pr.caster.x; pr.y = pr.caster.y - 10; return true; }
+      const step = pr.speed * dt;
+      pr.x += pr.dir.x * step; pr.y += pr.dir.y * step; pr.travelled += step;
+      if (pr.travelled > pr.range || pr.x < 0 || pr.y < 0 || pr.x > MAP_W || pr.y > MAP_H) return false;
+      if (!pr.pierce) {
+        if (pointBlocked(pr.x, pr.y, 2)) { this.broadcast('impact', { type: 'poof', x: pr.x, y: pr.y }); return false; }
+        const hitProp = propAt(pr.x, pr.y, props, pr.radius);
+        if (hitProp) { this.damageProp(hitProp, pr.abilityId === 'strike' ? 12 : 30); this.broadcast('impact', { type: 'poof', x: pr.x, y: pr.y }); return false; }
       }
-      return !m.triggered;
+      let consumed = false;
+      this.state.players.forEach((e) => {
+        if (consumed || !e.alive || e === pr.caster || (pr.hit && pr.hit.has(e.id))) return;
+        if (Math.hypot(e.x - pr.x, e.y - 10 - pr.y) < pr.radius + PLAYER_RADIUS + 4) {
+          if (pr.hit) pr.hit.add(e.id); else consumed = true;
+          const alive = this.dealDamage(e, pr.damage, pr.caster, pr.abilityId);
+          if (alive && pr.applies) this.applyStatus(e, pr.applies, pr.caster);
+          this.broadcast('impact', { type: pr.abilityId, x: e.x, y: e.y - 10 });
+        }
+      });
+      return !consumed;
     });
   }
 
-  processEffects(now, dtSec) {
-    for (let i = this.effects.length - 1; i >= 0; i--) {
-      const fx = this.effects[i];
-      const elapsed = Math.max(0, now - fx.createdAt);
-
-      if (fx.type === 'meteor' || fx.type === 'lightning') {
-        if (elapsed >= fx.telegraph && !fx.impacted) {
-          fx.impacted = true;
-          this.state.players.forEach((e) => { if (e.alive && dist(e, fx) < fx.radius) this.applyDamage(e, fx.damage, fx.caster, fx.type); });
-          this.broadcast('impact', { type: fx.type, x: fx.x, y: fx.y, radius: fx.radius });
+  processTraps(now) {
+    this.traps = this.traps.filter((t) => {
+      if (now > t.expiresAt) return false;
+      let fired = false;
+      this.state.players.forEach((e) => {
+        if (fired || !e.alive || e === t.caster) return;
+        if (Math.hypot(e.x - t.x, e.y - t.y) < t.radius) {
+          fired = true;
+          if (this.dealDamage(e, t.damage, t.caster, 'trap')) this.applyStatus(e, 'root', t.caster);
+          this.broadcast('impact', { type: 'trap', x: t.x, y: t.y });
         }
-        if (elapsed > fx.telegraph + 300) this.effects.splice(i, 1);
+      });
+      return !fired;
+    });
+  }
 
-      } else if (fx.type === 'blackhole') {
-        if (elapsed >= fx.telegraph && !fx.exploded) {
-          fx.exploded = true;
-          this.state.players.forEach((e) => { if (e.alive && dist(e, fx) < fx.radius) this.applyDamage(e, fx.damage, fx.caster, 'blackhole'); });
-          this.broadcast('impact', { type: 'blackhole', x: fx.x, y: fx.y, radius: fx.radius });
-        } else if (elapsed < fx.telegraph) {
-          this.state.players.forEach((e) => {
-            if (!e.alive) return;
-            const d = dist(e, fx);
-            if (d < 200 && d > 4) { const dir = normalize(fx.x - e.x, fx.y - e.y); e.x += dir.x * 140 * dtSec; e.y += dir.y * 140 * dtSec; }
+  processEffects(now, dt) {
+    this.effects = this.effects.filter((fx) => {
+      if (fx.caster && !fx.caster.alive && fx.type !== 'strike') return false;
+      switch (fx.type) {
+        case 'strike':
+          if (now < fx.at) return true;
+          this.areaHit(fx.x, fx.y, fx.radius, fx.caster, (e) => {
+            if (this.dealDamage(e, fx.damage, fx.caster, fx.impact) && fx.applies) this.applyStatus(e, fx.applies, fx.caster, fx.rootMs);
           });
-        }
-        if (elapsed > fx.telegraph + 300) this.effects.splice(i, 1);
-
-      } else if (fx.type === 'freeze') {
-        if (elapsed >= fx.telegraph) {
-          const active = elapsed - fx.telegraph;
-          const tickIdx = Math.floor(active / fx.tickInterval);
-          if (tickIdx > fx.lastTick && tickIdx * fx.tickInterval < fx.active) {
-            fx.lastTick = tickIdx;
-            this.state.players.forEach((e) => { if (e.alive && dist(e, fx) < fx.radius) { this.applyDamage(e, fx.damage, fx.caster, 'freeze'); e._slowUntil = now + fx.tickInterval + 100; e._slowMult = fx.slowMult; } });
+          this.broadcast('impact', { type: fx.impact, x: fx.x, y: fx.y, radius: fx.radius });
+          return false;
+        case 'blackhole':
+          if (now < fx.at) {
+            this.state.players.forEach((e) => {
+              if (!e.alive || e === fx.caster || e.invulnUntil > now) return;
+              const d = Math.hypot(e.x - fx.x, e.y - fx.y);
+              if (d < fx.pullRadius && d > 8) { const n = normalize(fx.x - e.x, fx.y - e.y); e.x += n.x * 170 * dt; e.y += n.y * 170 * dt; }
+            });
+            return true;
           }
-          if (elapsed > fx.telegraph + fx.active + 150) this.effects.splice(i, 1);
-        }
-
-      } else if (fx.type === 'wave') {
-        const frontElapsed = elapsed - fx.telegraph;
-        if (frontElapsed >= 0) {
-          const front = fx.speed * (frontElapsed / 1000);
+          this.areaHit(fx.x, fx.y, fx.radius, fx.caster, (e) => this.dealDamage(e, fx.damage, fx.caster, 'black_hole'));
+          this.broadcast('impact', { type: 'blackhole', x: fx.x, y: fx.y, radius: fx.radius });
+          return false;
+        case 'wave': {
+          if (now < fx.at) return true;
+          const front = fx.speed * (now - fx.at) / 1000;
+          const nx = -fx.dir.y, ny = fx.dir.x;
           this.state.players.forEach((e) => {
-            if (!e.alive || fx.hitSet.has(e.id)) return;
-            const s = (e.x - fx.originX) * fx.dirX + (e.y - fx.originY) * fx.dirY;
-            if (Math.abs(s - front) <= fx.width / 2) { fx.hitSet.add(e.id); this.applyDamage(e, fx.damage, fx.caster, 'wave'); }
+            if (!e.alive || e === fx.caster || fx.hit.has(e.id)) return;
+            const s = (e.x - fx.ox) * fx.dir.x + (e.y - fx.oy) * fx.dir.y;
+            const lat = Math.abs((e.x - fx.ox) * nx + (e.y - fx.oy) * ny);
+            if (s > 0 && Math.abs(s - front) < 40 && lat < fx.width / 2) {
+              fx.hit.add(e.id);
+              if (this.dealDamage(e, fx.damage, fx.caster, fx.abilityId)) { this.knock(e, fx.dir, fx.knock); this.applyStatus(e, fx.applies, fx.caster); }
+            }
           });
-          if (front > Math.sqrt(this.state.arenaW ** 2 + this.state.arenaH ** 2) + fx.width) this.effects.splice(i, 1);
+          return front < fx.length;
         }
-
-      } else if (fx.type === 'fireball') {
-        fx.x += fx.dir.x * fx.speed * dtSec;
-        fx.y += fx.dir.y * fx.speed * dtSec;
-        let hit = false;
-        this.state.players.forEach((e) => {
-          if (hit || !e.alive || e === fx.caster) return;
-          if (dist(e, fx) < 24) { this.applyDamage(e, fx.damage, fx.caster, fx.abilityId || 'fireball'); hit = true; }
-        });
-        if (hit || elapsed > fx.maxLife || fx.x < -40 || fx.x > this.state.arenaW + 40 || fx.y < -40 || fx.y > this.state.arenaH + 40) this.effects.splice(i, 1);
+        case 'storm': {
+          if (now < fx.at) return true;
+          const c = fx.caster;
+          const points = [];
+          this.state.players.forEach((e) => {
+            if (e.alive && e !== c && dist(e, c) < fx.radius) {
+              points.push({ x: e.x, y: e.y });
+              if (this.dealDamage(e, fx.damage, c, 'thunderstorm')) this.applyStatus(e, 'shock', c);
+            }
+          });
+          this.broadcast('bolts', { x: c.x, y: c.y, points, radius: fx.radius });
+          return false;
+        }
+        case 'breath': {
+          if (now < fx.at) return true;
+          const c = fx.caster;
+          const base = Math.atan2(fx.dir.y, fx.dir.x);
+          this.state.players.forEach((e) => {
+            if (!e.alive || e === c) return;
+            const d = dist(e, c);
+            let da = Math.atan2(e.y - c.y, e.x - c.x) - base;
+            da = Math.atan2(Math.sin(da), Math.cos(da));
+            if (d < fx.radius && Math.abs(da) < fx.arc) { if (this.dealDamage(e, fx.damage, c, 'dragon_breath')) this.applyStatus(e, 'burn', c); }
+          });
+          this.broadcast('impact', { type: 'breath', x: c.x, y: c.y, dx: fx.dir.x, dy: fx.dir.y, radius: fx.radius });
+          fx.ticksLeft -= 1; fx.at = now + fx.tickMs;
+          return fx.ticksLeft > 0;
+        }
+        case 'hop': {
+          if (now < fx.at) return true;
+          const c = fx.caster, t = fx.target;
+          if (!t.alive) return false;
+          const n = normalize(t.x - c.x, t.y - c.y);
+          c.x = t.x + n.x * 30; c.y = t.y + n.y * 30;
+          resolveCircle(c, PLAYER_RADIUS, this.liveProps());
+          this.broadcast('hop', { casterId: c.id, x: c.x, y: c.y, tx: t.x, ty: t.y });
+          this.dealDamage(t, fx.damage, c, 'shadow_strike');
+          return false;
+        }
+        default: return false;
       }
-    }
-
-    // apply slow multiplier as a velocity dampener (read by movement already applied this tick)
-    this.state.players.forEach((p) => {
-      if (p._slowUntil && p._slowUntil > now) { p.vx *= p._slowMult; p.vy *= p._slowMult; }
     });
   }
 }
