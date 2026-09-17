@@ -19,13 +19,13 @@ export class Player extends Schema {
     this.alive = true;
     this.kills = 0;
     this.score = 0;
-    this.isBoss = false;
     this.legend = '';
+    this.mythic = '';     // mythic ability earned by killing the champion
     this.abilities = new ArraySchema(); // 3 normal ability ids
     this.passives = new ArraySchema();  // passive ids (innate + stolen)
     this.invulnUntil = 0;
     this.cooldowns = new MapSchema();   // abilityId -> ms-epoch when ready again
-    this.fx = '';        // comma list of active statuses: burn,chill,wet,shock,root,stun,mark,airborne
+    this.fx = '';        // comma list of active statuses (burn,chill,wet,shock,root,stun,mark,airborne,poison,...)
     this.hidden = false; // standing inside tall grass
     this.inWater = false;
   }
@@ -46,8 +46,8 @@ defineTypes(Player, {
   alive: 'boolean',
   kills: 'number',
   score: 'number',
-  isBoss: 'boolean',
   legend: 'string',
+  mythic: 'string',
   abilities: ['string'],
   passives: ['string'],
   invulnUntil: 'number',
@@ -81,8 +81,9 @@ export class ArenaState extends Schema {
     this.arenaW = 1920;
     this.arenaH = 1344;
     this.safeRadius = 900;
-    this.bossId = '';
-    this.bossHuntEndAt = 0;
+    this.championId = ''; // strongest player right now (most kills)
+    this.timeStopBy = '';  // who froze time (everyone else is frozen)
+    this.timeStopUntil = 0;
     this.eventId = '';
     this.eventUntil = 0;
     this.winnerId = '';
@@ -100,8 +101,9 @@ defineTypes(ArenaState, {
   arenaW: 'number',
   arenaH: 'number',
   safeRadius: 'number',
-  bossId: 'string',
-  bossHuntEndAt: 'number',
+  championId: 'string',
+  timeStopBy: 'string',
+  timeStopUntil: 'number',
   eventId: 'string',
   eventUntil: 'number',
   winnerId: 'string',
