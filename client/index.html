@@ -102,8 +102,63 @@
     #banner.show { opacity: 1; }
     #toast { left: 50%; bottom: 100px; transform: translateX(-50%); padding: 8px 14px; font-size: 13px; opacity: 0; transition: opacity .25s; text-align: center; display: flex; gap: 8px; align-items: center; }
     #toast.show { opacity: 1; }
-    #bossPrompt { left: 50%; bottom: 100px; transform: translateX(-50%); font-size: 12px; color: #ff9fbf; opacity: 0; padding: 6px 14px; }
-    #bossPrompt.show { opacity: 1; pointer-events: auto; cursor: pointer; }
+    .slot.mythic { width: 70px; height: 70px; border-color: #c46bff; box-shadow: 0 0 14px rgba(196,107,255,.6); animation: mythGlow 1.4s ease-in-out infinite; }
+    @keyframes mythGlow { 50% { box-shadow: 0 0 24px rgba(196,107,255,.95); } }
+    #bossBar .lbl { color: #ffd166 !important; font-weight: 700; }
+    #bossBar .fill { background: linear-gradient(90deg,#ffb800,#ffe27a) !important; }
+
+    /* time stop overlay + champion arrow */
+    #timeStopFx { inset: 0; opacity: 0; transition: opacity .2s; background: radial-gradient(ellipse at center, rgba(60,70,110,0.05) 30%, rgba(40,50,90,0.55) 100%); box-shadow: inset 0 0 120px rgba(255,226,122,0.35); display: flex; flex-direction: column; align-items: center; justify-content: center; }
+    #timeStopFx.show { opacity: 1; }
+    #timeStopFx .clock { font-size: 64px; opacity: .35; animation: tsPulse .6s ease-in-out infinite alternate; }
+    #timeStopFx .lbl { margin-top: 6px; font-size: 18px; font-weight: 800; color: #ffe27a; text-shadow: 0 2px 6px #000; }
+    @keyframes tsPulse { to { transform: scale(1.15); opacity: .6; } }
+    #champArrow { transform: translate(-50%, -50%); display: none; width: 46px; height: 46px; align-items: center; justify-content: center; }
+    #champArrow.show { display: flex; }
+    #champArrow .ar { position: absolute; font-size: 34px; color: #ffd166; text-shadow: 0 0 8px #000, 0 0 12px #ffb800; }
+    #champArrow .cr { position: absolute; font-size: 18px; animation: tsPulse .5s ease-in-out infinite alternate; }
+
+    /* ---------------- touch controls ---------------- */
+    #touchUI { position: absolute; inset: 0; pointer-events: none; }
+    #joyZone { position: absolute; left: 0; bottom: 0; width: 50vw; height: 62vh; pointer-events: auto; touch-action: none; }
+    #joyBase { position: absolute; left: 96px; top: calc(100% - 110px); width: 130px; height: 130px; transform: translate(-50%, -50%); border-radius: 50%;
+      background: radial-gradient(circle, rgba(0,0,0,0.15), rgba(0,0,0,0.35)); border: 3px solid rgba(255,209,102,0.45); opacity: .45; transition: opacity .15s; }
+    #joyBase.active { opacity: 1; transition: none; }
+    #joyKnob { position: absolute; left: 50%; top: 50%; width: 58px; height: 58px; transform: translate(-50%, -50%); border-radius: 50%;
+      background: radial-gradient(circle at 35% 35%, #ffe7a8, #e89b2a); box-shadow: 0 3px 8px rgba(0,0,0,.5); }
+    #actionPad { position: absolute; right: env(safe-area-inset-right, 0px); bottom: env(safe-area-inset-bottom, 0px); width: 240px; height: 240px; pointer-events: none; }
+    .tbtn { position: absolute; width: 60px; height: 60px; border-radius: 50%; pointer-events: auto; touch-action: none; user-select: none; -webkit-user-select: none;
+      background: radial-gradient(circle at 40% 35%, #3a2a18, #120d08); border: 3px solid #8a6a3a; box-shadow: 0 3px 8px rgba(0,0,0,.55); display: flex; align-items: center; justify-content: center; overflow: hidden; }
+    .tbtn .ico { pointer-events: none; }
+    .tbtn .cd { position: absolute; inset: 0; display: none; align-items: center; justify-content: center; background: rgba(0,0,0,.62); color: #fff; font-weight: 800; font-size: 18px; border-radius: 50%; }
+    .tbtn.cooling .cd { display: flex; }
+    .tbtn.held { transform: scale(1.12); border-color: #fff; }
+    .tbtn.basic { width: 84px; height: 84px; right: 18px; bottom: 18px; border-color: #d8d8d8; }
+    .tbtn.n0 { right: 125px; bottom: 30px; }
+    .tbtn.n1 { right: 112px; bottom: 77px; }
+    .tbtn.n2 { right: 77px; bottom: 112px; }
+    .tbtn.legend { width: 68px; height: 68px; right: 26px; bottom: 126px; border-color: #ffb800; box-shadow: 0 0 14px rgba(255,184,0,.55); }
+    .tbtn.mythic { width: 64px; height: 64px; right: 146px; bottom: 146px; border-color: #c46bff; animation: mythGlow 1.4s ease-in-out infinite; }
+    body.touch, body.touch #game { touch-action: none; overscroll-behavior: none; -webkit-user-select: none; user-select: none; }
+    body.touch #hotbar { display: none; }
+    body.touch #vitals { left: 8px; top: 8px; bottom: auto; padding: 5px; gap: 5px; }
+    body.touch #vitals .face { width: 36px; height: 36px; }
+    body.touch #vitals .bars { width: 96px; }
+    body.touch .bar { height: 9px; margin-bottom: 3px; }
+    body.touch #statsLine { font-size: 10px; } body.touch #selfStatus { font-size: 12px; min-height: 14px; }
+    body.touch #playersLeft { top: 86px; left: 8px; font-size: 11px; padding: 4px 8px; }
+    body.touch #helpBtn { top: 86px; left: auto; right: 8px; font-size: 11px; padding: 4px 8px; }
+    body.touch #helpPanel { top: 118px; left: 8px; right: 8px; width: auto; max-height: 55vh; overflow-y: auto; pointer-events: auto; font-size: 11px; }
+    body.touch #passives { left: 8px; right: auto; top: 116px; bottom: auto; padding: 2px 4px; max-width: 45vw; }
+    body.touch #passives .p { font-size: 13px; padding: 1px 3px; margin: 1px; }
+    body.touch #killfeed { top: 118px; right: 8px; width: 44vw; }
+    body.touch #killfeed .k { font-size: 10px; padding: 2px 6px; }
+    body.touch #topbar { top: 6px; padding: 3px 10px; } body.touch #timer { font-size: 17px; } body.touch #remaining { font-size: 10px; }
+    body.touch #bossBar { top: 8px; left: auto; right: 8px; transform: none; width: 34vw; padding: 3px 6px; }
+    body.touch #bossBar .lbl { font-size: 10px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    body.touch #banner { top: 150px; font-size: 13px; white-space: normal; width: 92vw; }
+    body.touch #toast { bottom: auto; top: 40%; font-size: 12px; max-width: 90vw; }
+    body.touch #timeStopFx .clock { font-size: 44px; }
 
     #waiting, #roundEnd { position: fixed; inset: 0; display: none; align-items: center; justify-content: center; z-index: 15; pointer-events: none; }
     #waiting.show, #roundEnd.show { display: flex; }
@@ -117,7 +172,10 @@
       #vitals .bars { width: 120px; } #vitals .face { width: 42px; height: 42px; }
       #hotbar { bottom: 92px; gap: 5px; } .slot { width: 48px; height: 48px; } .slot.legend { width: 56px; height: 56px; }
       #passives { max-width: 140px; } #killfeed { width: 160px; font-size: 10px; }
-      #toast, #bossPrompt { bottom: 160px; }
+      #toast { bottom: 160px; }
+      .nav { position: sticky; bottom: -16px; background: var(--panel); padding: 10px 0; margin-bottom: -4px; z-index: 2; }
+      #login { padding: 8px; } #login .card { padding: 12px 10px 14px; }
+      .heroes { grid-template-columns: repeat(auto-fill, minmax(104px, 1fr)); } .skills { grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); }
     }
   </style>
 </head>
@@ -143,7 +201,7 @@
     <div class="panel wood" id="helpBtn">📜 الكومبوهات</div>
     <div class="panel wood" id="helpPanel"></div>
     <div class="panel wood" id="topbar"><div id="timer">--:--</div><div id="remaining"></div></div>
-    <div class="panel wood" id="bossBar"><div class="lbl" id="bossLbl">الوحش</div><div class="bar"><div class="fill" id="bossFill"></div></div></div>
+    <div class="panel wood" id="bossBar"><div class="lbl" id="bossLbl">👑 البطل الأقوى</div><div class="bar"><div class="fill" id="bossFill"></div></div></div>
     <div class="panel" id="banner"></div>
     <div class="panel wood" id="toast"></div>
     <div class="panel wood" id="vitals">
@@ -156,7 +214,6 @@
       </div>
     </div>
     <div class="panel wood" id="hotbar"></div>
-    <div class="panel wood" id="bossPrompt">👑 أنت الوحش! اضغط R للانفجار</div>
     <div class="panel wood" id="passives"></div>
     <div class="panel" id="killfeed"></div>
   </div>
