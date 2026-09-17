@@ -2,7 +2,7 @@
 //  - left side: floating joystick that appears wherever your thumb lands
 //  - right side: ability buttons — tap = auto-aim at the nearest enemy,
 //    hold & drag = aim manually (release to cast)
-import { iconStyle, ABILITIES, LEGENDS, MYTHICS, BASIC } from './gameData.js';
+import { iconStyle } from './gameData.js';
 
 export function isTouchDevice() {
   return (typeof window !== 'undefined') && (('ontouchstart' in window) || navigator.maxTouchPoints > 0)
@@ -67,26 +67,20 @@ export class TouchControls {
     document.addEventListener('touchmove', (e) => { if (e.target.closest && e.target.closest('#touchUI')) e.preventDefault(); }, { passive: false });
   }
 
-  buildButtons(me) {
-    const key = [...me.abilities].join(',') + '|' + me.legend + '|' + (me.mythic || '');
+  buildButtons(slots) {
+    const key = slots.map((x) => x[0] + ':' + x[3]).join(',');
     if (key === this.loadoutKey) return;
     this.loadoutKey = key;
     this.pad.innerHTML = '';
     this.buttons.clear();
-    const defs = [
-      { id: 'strike', def: BASIC, cls: 'basic' },
-      ...[...me.abilities].map((id, i) => ({ id, def: ABILITIES[id], cls: 'n' + i })),
-      { id: me.legend, def: LEGENDS[me.legend], cls: 'legend' },
-    ];
-    if (me.mythic) defs.push({ id: me.mythic, def: MYTHICS[me.mythic], cls: 'mythic' });
-    defs.forEach(({ id, def, cls }) => {
-      if (!def) return;
+    this.aim = null;
+    slots.forEach(([id, , def, cls]) => {
       const b = document.createElement('div');
       b.className = `tbtn ${cls}`;
-      b.innerHTML = `<div class="ico" style="${iconStyle(def.icon, cls === 'basic' ? 50 : 40)}"></div><div class="cd"></div>`;
+      b.innerHTML = `<div class="ico" style="${iconStyle(def.icon, cls === 'basic' ? 50 : 40)}">${def.icon && def.icon.emoji ? def.icon.emoji : ''}</div><div class="cd"></div>`;
       this.pad.appendChild(b);
       const cdEl = b.querySelector('.cd');
-      this.buttons.set(id, { el: b, cdEl, lastCd: -1 });
+      this.buttons.set(id, { el: b, cdEl, lastCd: -1, cls });
       let start = null;
       b.addEventListener('pointerdown', (e) => {
         e.preventDefault(); e.stopPropagation();
@@ -114,12 +108,12 @@ export class TouchControls {
     });
   }
 
-  update(me) {
+  update(me, slots) {
     if (!me) return;
-    this.buildButtons(me);
+    this.buildButtons(slots);
     const now = Date.now();
     this.buttons.forEach((btn, id) => {
-      const cd = (me.cooldowns.get(id) || 0) - now;
+      const cd = btn.cls === 'bonus' || btn.cls === 'curse' ? 0 : (me.cooldowns.get(id) || 0) - now;
       const secs = cd > 0 ? Math.ceil(cd / 1000) : 0;
       if (secs !== btn.lastCd) {
         btn.lastCd = secs;
@@ -127,7 +121,9 @@ export class TouchControls {
         btn.el.classList.toggle('cooling', secs > 0);
       }
     });
-    this.root.style.display = me.alive ? '' : 'none';
+    const dom = this.buttons.get('domain');
+    if (dom) { const st = this.scene.room.state; dom.el.classList.toggle('locked', !!st.activeDomainPlayer && st.activeDomainPlayer !== me.id); }
+    this.root.style.display = me.alive || me.ghost ? '' : 'none';
   }
 
   get aimRadius() { return AIM_R; }

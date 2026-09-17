@@ -160,6 +160,46 @@
     body.touch #toast { bottom: auto; top: 40%; font-size: 12px; max-width: 90vw; }
     body.touch #timeStopFx .clock { font-size: 44px; }
 
+
+    /* ---------------- new systems ---------------- */
+    #darkFx { inset: 0; opacity: 0; transition: opacity .6s; }
+    #darkFx.show { opacity: 1; }
+    #announce { left: 50%; top: 32%; transform: translate(-50%, -50%) scale(.6); font-size: 38px; font-weight: 900; text-shadow: 0 3px 0 #000, 0 0 18px rgba(0,0,0,.8); opacity: 0; white-space: nowrap; pointer-events: none; }
+    #announce.show { animation: annPop 1.9s ease-out forwards; }
+    @keyframes annPop { 0% { opacity: 0; transform: translate(-50%, -50%) scale(.5); } 12% { opacity: 1; transform: translate(-50%, -50%) scale(1.15); } 22% { transform: translate(-50%, -50%) scale(1); } 80% { opacity: 1; } 100% { opacity: 0; transform: translate(-50%, -60%) scale(1); } }
+    #upgradeBox { left: 50%; top: 70px; transform: translateX(-50%); padding: 8px 10px; display: none; pointer-events: auto; text-align: center; z-index: 3; }
+    #upgradeBox.show { display: block; animation: annPop2 .25s ease-out; }
+    @keyframes annPop2 { from { transform: translateX(-50%) scale(.8); opacity: 0; } }
+    #upgradeBox .ttl { font-size: 13px; color: var(--gold); margin-bottom: 6px; font-weight: 800; }
+    #upgradeBox .cards { display: flex; gap: 6px; }
+    #upgradeBox .upc { width: 108px; background: #231a10; border: 2px solid #8a6a3a; border-radius: 8px; padding: 6px; cursor: pointer; display: flex; flex-direction: column; gap: 2px; align-items: center; touch-action: none; }
+    #upgradeBox .upc:hover { border-color: var(--gold); background: #3b2b17; }
+    #upgradeBox .upc .ic { font-size: 24px; }
+    #upgradeBox .upc b { font-size: 13px; }
+    #upgradeBox .upc span { font-size: 10px; color: var(--muted); line-height: 1.3; }
+    #bossBar.isBoss .lbl { color: #ff8a5a !important; }
+    #bossBar.isBoss .fill { background: linear-gradient(90deg,#ff3d1f,#ff8a4c) !important; }
+    #roundEnd tr.me td { color: var(--gold); font-weight: 800; }
+    #passives .p.u { border-color: #3a6a3a; }
+    .slot.fusion { width: 64px; height: 64px; border-color: #6dff8a; box-shadow: 0 0 12px rgba(109,255,138,.5); }
+    .slot.bonus { width: 64px; height: 64px; border-color: #ffd166; box-shadow: 0 0 14px rgba(255,209,102,.8); animation: mythGlow 1s ease-in-out infinite; }
+    .slot.curse { width: 76px; height: 76px; border-color: #b0c0ff; box-shadow: 0 0 16px rgba(176,192,255,.8); }
+    .tbtn.fusion { width: 56px; height: 56px; right: 196px; bottom: 36px; border-color: #6dff8a; box-shadow: 0 0 12px rgba(109,255,138,.55); }
+    .tbtn.bonus { width: 52px; height: 52px; right: 20px; bottom: 206px; border-color: #ffd166; animation: mythGlow 1s ease-in-out infinite; }
+    .tbtn.curse { width: 90px; height: 90px; right: 22px; bottom: 22px; border-color: #b0c0ff; box-shadow: 0 0 18px rgba(176,192,255,.8); }
+    #actionPad { width: 270px; height: 270px; }
+    body.touch #upgradeBox { top: 118px; padding: 5px 6px; } body.touch #upgradeBox .upc { width: 92px; }
+    body.touch #announce { font-size: 24px; top: 28%; }
+    /* lobby additions */
+    .modes { gap: 8px; }
+    .mode { background: #231a10; border: 2px solid #4a3622; border-radius: 10px; padding: 8px 18px; cursor: pointer; text-align: center; display: flex; flex-direction: column; min-width: 130px; }
+    .mode span { font-size: 11px; color: var(--muted); }
+    .mode.sel { border-color: var(--gold); background: #3b2b17; }
+    .profile { text-align: center; font-size: 12px; color: #9fe8a0; margin-bottom: 8px; }
+    .locked { text-align: center; font-size: 12px; color: var(--muted); margin-top: 10px; }
+    .fusionHint { margin-top: 10px; background: #14241a; border: 1px solid #3a6a3a; border-radius: 8px; padding: 8px; font-size: 12px; text-align: center; }
+    .tile .tags { display: flex; gap: 4px; justify-content: center; flex-wrap: wrap; }
+    .btn.small { padding: 4px 10px; font-size: 12px; margin-right: 8px; }
     #waiting, #roundEnd { position: fixed; inset: 0; display: none; align-items: center; justify-content: center; z-index: 15; pointer-events: none; }
     #waiting.show, #roundEnd.show { display: flex; }
     #waiting .box, #roundEnd .box { padding: 20px 28px; text-align: center; min-width: 280px; max-width: 92vw; }
@@ -167,6 +207,52 @@
     #roundEnd td, #roundEnd th { padding: 4px 8px; font-size: 13px; text-align: center; }
     #roundEnd th { color: var(--gold); }
     #roundEnd img { width: 24px; height: 24px; vertical-align: middle; }
+
+    /* ---------------- strategic layer: rounds, army, summons, domains, final war ---------------- */
+    #roundLbl { font-size: 11px; font-weight: 800; color: #ffe7a8; letter-spacing: .5px; }
+    #roundLbl.final { color: #ff6b3d; text-shadow: 0 0 8px rgba(255,80,40,.7); }
+    #armyLine { font-size: 11px; color: #ffe7a8; margin-top: 2px; white-space: nowrap; }
+    #armyLine b { color: var(--gold); }
+    #domainBar { left: 50%; top: 118px; transform: translateX(-50%); min-width: 260px; padding: 5px 12px; text-align: center; display: none; }
+    #domainBar.show { display: block; }
+    #domainBar .lbl { font-size: 13px; font-weight: 800; white-space: nowrap; }
+    #domainBar .bar { height: 6px; margin: 4px 0 0; }
+    #domainBar .fill { height: 100%; width: 100%; }
+    #domainFx { inset: 0; opacity: 0; transition: opacity .5s; }
+    #domainFx.show { opacity: 1; }
+    .slot.summon { border-color: #7dd8ff; }
+    .slot.summon .ico { image-rendering: pixelated; }
+    .slot.domain { width: 66px; height: 66px; border-color: #ff6bd8; box-shadow: 0 0 12px rgba(255,107,216,.5); }
+    .slot.domain.locked { filter: grayscale(.8); }
+    .slot .lock { position: absolute; bottom: 1px; left: 3px; font-size: 12px; z-index: 4; }
+    .tbtn.summon1 { width: 50px; height: 50px; right: 232px; bottom: 96px; border-color: #7dd8ff; }
+    .tbtn.summon2 { width: 50px; height: 50px; right: 206px; bottom: 150px; border-color: #7dd8ff; }
+    .tbtn.domain { width: 58px; height: 58px; right: 92px; bottom: 196px; border-color: #ff6bd8; box-shadow: 0 0 12px rgba(255,107,216,.55); }
+    .tbtn .ico { font-size: 28px; }
+    .tbtn.locked { filter: grayscale(.9); opacity: .7; }
+    #targetBox, #growthBox { position: fixed; inset: 0; display: none; align-items: center; justify-content: center; z-index: 16; pointer-events: none; }
+    #targetBox.show { display: flex; }
+    #targetBox .box { padding: 16px 18px; text-align: center; max-width: 94vw; pointer-events: auto; }
+    #targetBox h2 { color: #ff6b3d; margin: 0 0 4px; }
+    #targetBox .sub { font-size: 12px; color: var(--muted); margin-bottom: 10px; }
+    #targetBox .cards { display: flex; gap: 8px; flex-wrap: wrap; justify-content: center; }
+    .tcard { width: 128px; background: #231a10; border: 2px solid #5a4028; border-radius: 10px; padding: 8px; cursor: pointer; touch-action: manipulation; position: relative; }
+    .tcard img { width: 44px; height: 44px; }
+    .tcard b { display: block; font-size: 13px; margin-top: 2px; }
+    .tcard span { display: block; font-size: 11px; color: var(--muted); }
+    .tcard.sel { border-color: #ff6b3d; background: #3b1a10; box-shadow: 0 0 14px rgba(255,107,61,.5); }
+    .tcard.full { opacity: .4; cursor: not-allowed; }
+    .tcard .att { color: #ffb13d; }
+    #reGrowth { margin-top: 10px; border-top: 1px dashed #5a4028; padding-top: 8px; }
+    #reGrowth h3 { margin: 0 0 6px; color: #7dffb0; font-size: 16px; letter-spacing: 1px; }
+    #reGrowth .g { font-size: 13px; line-height: 1.7; }
+    #reGrowth .up { color: #ffd166; font-weight: 800; }
+    #reNext { margin-top: 10px; color: var(--muted); font-size: 12px; }
+    #roundEnd .box { max-height: 92vh; overflow-y: auto; }
+    body.touch #domainBar { top: 150px; min-width: 60vw; padding: 3px 8px; } body.touch #domainBar .lbl { font-size: 11px; }
+    body.touch #armyLine { font-size: 9px; }
+    body.touch #roundEnd td, body.touch #roundEnd th { font-size: 11px; padding: 2px 4px; }
+    body.touch .tcard { width: 104px; padding: 5px; }
 
     @media (max-width: 640px) {
       #vitals .bars { width: 120px; } #vitals .face { width: 42px; height: 42px; }
@@ -183,7 +269,7 @@
   <div id="login">
     <div class="card">
       <h1>⚔ CHAOS.IO</h1>
-      <div class="sub">ساحة الأبطال — اختر بطلك وقدراتك، آخر ناجٍ يفوز</div>
+      <div class="sub">ساحة الأبطال — بطلك + جيشك: 5 جولات ثم الحرب الأخيرة، آخر قوة صامدة تفوز</div>
       <div class="steps" id="steps"></div>
       <div id="stepBody"></div>
       <div class="nav">
@@ -200,7 +286,9 @@
     <div class="panel wood" id="playersLeft">اللاعبون: --</div>
     <div class="panel wood" id="helpBtn">📜 الكومبوهات</div>
     <div class="panel wood" id="helpPanel"></div>
-    <div class="panel wood" id="topbar"><div id="timer">--:--</div><div id="remaining"></div></div>
+    <div class="panel wood" id="topbar"><div id="roundLbl"></div><div id="timer">--:--</div><div id="remaining"></div></div>
+    <div class="panel" id="domainFx"></div>
+    <div class="panel wood" id="domainBar"><div class="lbl" id="domainLbl"></div><div class="bar"><div class="fill" id="domainFill"></div></div></div>
     <div class="panel wood" id="bossBar"><div class="lbl" id="bossLbl">👑 البطل الأقوى</div><div class="bar"><div class="fill" id="bossFill"></div></div></div>
     <div class="panel" id="banner"></div>
     <div class="panel wood" id="toast"></div>
@@ -211,6 +299,7 @@
         <div class="bar"><div id="shieldFill"></div></div>
         <div id="selfStatus"></div>
         <div id="statsLine">القتلات: 0</div>
+        <div id="armyLine"></div>
       </div>
     </div>
     <div class="panel wood" id="hotbar"></div>
@@ -222,7 +311,14 @@
   <div id="roundEnd"><div class="box wood">
     <h2 id="reTitle" style="color:var(--gold);margin:0;">انتهت الجولة</h2>
     <table id="reTable"></table>
-    <div style="margin-top:12px;color:var(--muted);font-size:12px;">الجولة القادمة تبدأ تلقائيًا...</div>
+    <div id="reGrowth"></div>
+    <div id="reNext">الجولة القادمة تبدأ تلقائيًا...</div>
+  </div></div>
+
+  <div id="targetBox"><div class="box wood">
+    <h2>🎯 اختر أهدافك للحرب الأخيرة</h2>
+    <div class="sub" id="tbSub"></div>
+    <div class="cards" id="tbCards"></div>
   </div></div>
 
   <script type="module" src="./src/main.js"></script>

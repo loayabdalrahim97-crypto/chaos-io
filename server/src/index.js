@@ -24,6 +24,7 @@ const gameServer = new Server({
 });
 
 gameServer.define('arena', ArenaRoom);
+gameServer.define('duo', ArenaRoom, { mode: 'duo' });
 
 gameServer.listen(PORT).then(() => {
   console.log(`[chaos-io] listening on :${PORT}`);

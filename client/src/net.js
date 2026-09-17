@@ -14,7 +14,7 @@ export function serverUrl() {
   return PROD_SERVER;
 }
 
-export async function joinArena(loadout) {
+export async function joinArena(loadout, mode = 'solo') {
   const client = new Client(serverUrl());
-  return client.joinOrCreate('arena', loadout);
+  return client.joinOrCreate(mode === 'duo' ? 'duo' : 'arena', loadout);
 }

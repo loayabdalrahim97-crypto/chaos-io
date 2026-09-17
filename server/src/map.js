@@ -105,8 +105,9 @@ const SHAPES = LAYOUT.objects.map(colliderShape);
 const PROP_R = 18;
 
 // push a circle (x,y,r) out of every solid; `liveProps` = array of props still standing
-export function resolveCircle(ent, r, liveProps) {
-  const solids = SHAPES.concat(liveProps.map((p) => ({ type: 'circle', cx: p.x, cy: p.y - 16, r: PROP_R })));
+export function solidsWith(liveProps) { return SHAPES.concat(liveProps.map((p) => ({ type: 'circle', cx: p.x, cy: p.y - 16, r: PROP_R }))); }
+export function resolveCircle(ent, r, liveProps, pre) {
+  const solids = pre || solidsWith(liveProps);
   for (let pass = 0; pass < 2; pass++) {
     for (const s of solids) {
       if (s.type === 'circle') {
@@ -166,4 +167,3 @@ export function randomOpenPoint(rng = Math.random, cx = MAP_W / 2, cy = MAP_H / 
   }
   return { x: cx, y: cy + 60 };
 }
-
